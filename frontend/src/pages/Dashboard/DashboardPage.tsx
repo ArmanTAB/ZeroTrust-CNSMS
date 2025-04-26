@@ -16,18 +16,8 @@ import {
   Pie,
   Cell,
 } from "recharts";
-
-// Используем моки для API, которые будут заменены на настоящие позже
-const DevicesApiMock = {
-  getAllDevices: async () => Promise.resolve([]),
-  getDeviceStatistics: async () =>
-    Promise.resolve({ total: 0, active: 0, quarantined: 0, blocked: 0 }),
-};
-
-const AccessApiMock = {
-  getAccessStatistics: async (days: number) =>
-    Promise.resolve({ total: 0, allowed: 0, denied: 0 }),
-};
+import DevicesApi from "../../api/devices.api";
+import AccessApi from "../../api/access.api";
 
 const DashboardPage: React.FC = () => {
   const { user } = useAuth();
@@ -44,6 +34,7 @@ const DashboardPage: React.FC = () => {
     denied: 0,
   });
   const [riskDistribution, setRiskDistribution] = useState<any[]>([]);
+  const [activityData, setActivityData] = useState<any[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -51,18 +42,32 @@ const DashboardPage: React.FC = () => {
       setLoading(true);
       try {
         // Получаем статистику по устройствам
-        const devices = await DevicesApiMock.getDeviceStatistics();
+        const devices = await DevicesApi.getDeviceStatistics();
         setDeviceStats(devices);
 
         // Получаем статистику по доступу за последние 7 дней
-        const access = await AccessApiMock.getAccessStatistics(7);
+        const access = await AccessApi.getAccessStatistics(7);
         setAccessStats(access);
 
-        // Моки для распределения рисков (в реальном приложении получали бы от API)
-        setRiskDistribution([
-          { name: "Low Risk (0-30)", value: 65, color: "#10B981" },
-          { name: "Medium Risk (31-70)", value: 25, color: "#F59E0B" },
-          { name: "High Risk (71-100)", value: 10, color: "#EF4444" },
+        // Формируем данные для распределения рисков
+        if (devices.risk_distribution) {
+          setRiskDistribution([
+            { name: "Low Risk (0-30)", value: devices.risk_distribution.low, color: "#10B981" },
+            { name: "Medium Risk (31-70)", value: devices.risk_distribution.medium, color: "#F59E0B" },
+            { name: "High Risk (71-100)", value: devices.risk_distribution.high, color: "#EF4444" },
+          ]);
+        }
+
+        // Получаем данные по активности (здесь пока оставляем моки, 
+        // так как у нас нет эндпоинта для получения активности по дням)
+        setActivityData([
+          { day: "Mon", allowed: 25, denied: 5 },
+          { day: "Tue", allowed: 30, denied: 8 },
+          { day: "Wed", allowed: 35, denied: 7 },
+          { day: "Thu", allowed: 28, denied: 9 },
+          { day: "Fri", allowed: 32, denied: 12 },
+          { day: "Sat", allowed: 18, denied: 3 },
+          { day: "Sun", allowed: 15, denied: 2 },
         ]);
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
@@ -73,17 +78,6 @@ const DashboardPage: React.FC = () => {
 
     fetchDashboardData();
   }, []);
-
-  // Данные для активности по дням (в реальном приложении получали бы от API)
-  const activityData = [
-    { day: "Mon", allowed: 25, denied: 5 },
-    { day: "Tue", allowed: 30, denied: 8 },
-    { day: "Wed", allowed: 35, denied: 7 },
-    { day: "Thu", allowed: 28, denied: 9 },
-    { day: "Fri", allowed: 32, denied: 12 },
-    { day: "Sat", allowed: 18, denied: 3 },
-    { day: "Sun", allowed: 15, denied: 2 },
-  ];
 
   // Решение проблемы с ResponsiveContainer
   const renderPieChart = () => {

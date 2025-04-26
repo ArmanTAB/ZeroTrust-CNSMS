@@ -140,3 +140,29 @@ async def get_device_risk(
         "risk_level": "high" if risk_score > 70 else "medium" if risk_score > 30 else "low",
         "timestamp": datetime.utcnow()
     }
+
+@router.get("/statistics", response_model=dict)
+async def get_device_statistics(
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """Get device statistics for dashboard"""
+    all_devices = await get_all_devices()
+    
+    # Calculate statistics
+    stats = {
+        "total": len(all_devices),
+        "active": len([d for d in all_devices if d["status"] == DeviceStatus.ACTIVE]),
+        "inactive": len([d for d in all_devices if d["status"] == DeviceStatus.INACTIVE]),
+        "quarantined": len([d for d in all_devices if d["status"] == DeviceStatus.QUARANTINED]),
+        "blocked": len([d for d in all_devices if d["status"] == DeviceStatus.BLOCKED]),
+        "pending": len([d for d in all_devices if d["status"] == DeviceStatus.PENDING]),
+        "trusted": len([d for d in all_devices if d.get("is_trusted", False)]),
+        "untrusted": len([d for d in all_devices if not d.get("is_trusted", True)]),
+        "risk_distribution": {
+            "low": len([d for d in all_devices if d.get("risk_score", 0) <= 30]),
+            "medium": len([d for d in all_devices if 30 < d.get("risk_score", 0) <= 70]),
+            "high": len([d for d in all_devices if d.get("risk_score", 0) > 70])
+        }
+    }
+    
+    return stats

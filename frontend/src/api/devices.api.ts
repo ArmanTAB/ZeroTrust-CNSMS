@@ -71,24 +71,11 @@ const DevicesApi = {
    * Получить статистику по устройствам
    * Это метод для дашборда, на бэкенде его нет, поэтому мы будем имитировать его
    */
+  // Обновляем метод getDeviceStatistics, чтобы использовать реальный API
   getDeviceStatistics: async (): Promise<any> => {
     try {
-      // Получаем все устройства
-      const devices = await DevicesApi.getAllDevices();
-
-      // Рассчитываем статистику
-      const stats = {
-        total: devices.length,
-        active: devices.filter((d) => d.status === "active").length,
-        inactive: devices.filter((d) => d.status === "inactive").length,
-        quarantined: devices.filter((d) => d.status === "quarantined").length,
-        blocked: devices.filter((d) => d.status === "blocked").length,
-        pending: devices.filter((d) => d.status === "pending").length,
-        trusted: devices.filter((d) => d.is_trusted).length,
-        untrusted: devices.filter((d) => !d.is_trusted).length,
-      };
-
-      return stats;
+      const response = await api.get<any>("/devices/statistics");
+      return response.data;
     } catch (error) {
       console.error("Error fetching device statistics:", error);
       // Возвращаем нулевые значения в случае ошибки
@@ -101,6 +88,11 @@ const DevicesApi = {
         pending: 0,
         trusted: 0,
         untrusted: 0,
+        risk_distribution: {
+          low: 0,
+          medium: 0,
+          high: 0,
+        },
       };
     }
   },
