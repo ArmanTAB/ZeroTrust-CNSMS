@@ -47,3 +47,22 @@ class AccessLog(AccessBase):
     reason: Optional[str] = None
     risk_level: float = 0.0
     decision_factors: List[Dict[str, Any]] = []
+    
+class AlertType(str, Enum):
+    LOGIN_FAILURE = "login_failure"
+    UNAUTHORIZED_ACCESS = "unauthorized_access"
+    NEW_DEVICE = "new_device"
+    SYSTEM_UPDATE = "system_update"
+    UNUSUAL_ACTIVITY = "unusual_activity"
+
+class SecurityAlert(BaseModel):
+    id: str
+    alert_type: AlertType
+    title: str
+    description: str
+    severity: str  # high, medium, low
+    source_ip: Optional[str] = None
+    device_id: Optional[str] = None
+    user_id: Optional[str] = None
+    timestamp: datetime
+    resolved: bool = False

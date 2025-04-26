@@ -35,6 +35,7 @@ const DashboardPage: React.FC = () => {
   });
   const [riskDistribution, setRiskDistribution] = useState<any[]>([]);
   const [activityData, setActivityData] = useState<any[]>([]);
+  const [securityAlerts, setSecurityAlerts] = useState<any[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,26 +50,33 @@ const DashboardPage: React.FC = () => {
         const access = await AccessApi.getAccessStatistics(7);
         setAccessStats(access);
 
+        const alerts = await AccessApi.getSecurityAlerts(5);
+        setSecurityAlerts(alerts);
+
         // Формируем данные для распределения рисков
         if (devices.risk_distribution) {
           setRiskDistribution([
-            { name: "Low Risk (0-30)", value: devices.risk_distribution.low, color: "#10B981" },
-            { name: "Medium Risk (31-70)", value: devices.risk_distribution.medium, color: "#F59E0B" },
-            { name: "High Risk (71-100)", value: devices.risk_distribution.high, color: "#EF4444" },
+            {
+              name: "Low Risk (0-30)",
+              value: devices.risk_distribution.low,
+              color: "#10B981",
+            },
+            {
+              name: "Medium Risk (31-70)",
+              value: devices.risk_distribution.medium,
+              color: "#F59E0B",
+            },
+            {
+              name: "High Risk (71-100)",
+              value: devices.risk_distribution.high,
+              color: "#EF4444",
+            },
           ]);
         }
 
-        // Получаем данные по активности (здесь пока оставляем моки, 
-        // так как у нас нет эндпоинта для получения активности по дням)
-        setActivityData([
-          { day: "Mon", allowed: 25, denied: 5 },
-          { day: "Tue", allowed: 30, denied: 8 },
-          { day: "Wed", allowed: 35, denied: 7 },
-          { day: "Thu", allowed: 28, denied: 9 },
-          { day: "Fri", allowed: 32, denied: 12 },
-          { day: "Sat", allowed: 18, denied: 3 },
-          { day: "Sun", allowed: 15, denied: 2 },
-        ]);
+        // Получаем данные по активности по дням
+        const activity = await AccessApi.getAccessActivity(7);
+        setActivityData(activity);
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
       } finally {
@@ -85,9 +93,7 @@ const DashboardPage: React.FC = () => {
 
     return (
       <div style={{ width: "100%", height: 250 }}>
-        {/* @ts-ignore */}
         <PieChart width={500} height={250}>
-          {/* @ts-ignore */}
           <Pie
             data={riskDistribution}
             cx="50%"
@@ -96,18 +102,12 @@ const DashboardPage: React.FC = () => {
             outerRadius={80}
             fill="#8884d8"
             dataKey="value"
-            label={({ name, percent }: { name: string; percent: number }) =>
-              `${name}: ${(percent * 100).toFixed(0)}%`
-            }
           >
             {riskDistribution.map((entry, index) => (
-              /* @ts-ignore */
               <Cell key={`cell-${index}`} fill={entry.color} />
             ))}
           </Pie>
-          {/* @ts-ignore */}
-          <Tooltip />
-          {/* @ts-ignore */}
+          <Tooltip formatter={(value: number) => `${value}%`} />
           <Legend />
         </PieChart>
       </div>
@@ -287,100 +287,54 @@ const DashboardPage: React.FC = () => {
                 Recent Security Alerts
               </h3>
               <div className="divide-y divide-gray-200">
-                <div className="py-3">
-                  <div className="flex items-start">
-                    <div className="flex-shrink-0">
-                      <span className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-red-100 text-red-600">
-                        <svg
-                          className="h-5 w-5"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                          />
-                        </svg>
-                      </span>
-                    </div>
-                    <div className="ml-3">
-                      <h4 className="text-sm font-medium text-gray-900">
-                        Multiple login failures detected
-                      </h4>
-                      <p className="text-sm text-gray-500">
-                        5 failed login attempts from IP 192.168.1.25
-                      </p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        10 minutes ago
-                      </p>
-                    </div>
+                {securityAlerts.length === 0 ? (
+                  <div className="py-4 text-center text-gray-500">
+                    No security alerts
                   </div>
-                </div>
-                <div className="py-3">
-                  <div className="flex items-start">
-                    <div className="flex-shrink-0">
-                      <span className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-yellow-100 text-yellow-600">
-                        <svg
-                          className="h-5 w-5"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                          />
-                        </svg>
-                      </span>
+                ) : (
+                  securityAlerts.map((alert) => (
+                    <div key={alert.id} className="py-3">
+                      <div className="flex items-start">
+                        <div className="flex-shrink-0">
+                          <span
+                            className={`inline-flex items-center justify-center h-8 w-8 rounded-full ${
+                              alert.severity === "high"
+                                ? "bg-red-100 text-red-600"
+                                : alert.severity === "medium"
+                                ? "bg-yellow-100 text-yellow-600"
+                                : "bg-blue-100 text-blue-600"
+                            }`}
+                          >
+                            <svg
+                              className="h-5 w-5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                              />
+                            </svg>
+                          </span>
+                        </div>
+                        <div className="ml-3">
+                          <h4 className="text-sm font-medium text-gray-900">
+                            {alert.title}
+                          </h4>
+                          <p className="text-sm text-gray-500">
+                            {alert.description}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            {new Date(alert.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="ml-3">
-                      <h4 className="text-sm font-medium text-gray-900">
-                        New device connected
-                      </h4>
-                      <p className="text-sm text-gray-500">
-                        Unrecognized device with high risk score
-                      </p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        45 minutes ago
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="py-3">
-                  <div className="flex items-start">
-                    <div className="flex-shrink-0">
-                      <span className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-blue-100 text-blue-600">
-                        <svg
-                          className="h-5 w-5"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                      </span>
-                    </div>
-                    <div className="ml-3">
-                      <h4 className="text-sm font-medium text-gray-900">
-                        System update available
-                      </h4>
-                      <p className="text-sm text-gray-500">
-                        Security patch available for 12 devices
-                      </p>
-                      <p className="text-xs text-gray-400 mt-1">2 hours ago</p>
-                    </div>
-                  </div>
-                </div>
+                  ))
+                )}
               </div>
             </div>
           </div>

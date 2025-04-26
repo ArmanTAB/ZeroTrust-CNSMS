@@ -1,8 +1,9 @@
 # backend/app/access/utils.py
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from ..db import db
-from .models import AccessLogCreate, AccessDecision
 from ..devices.utils import get_device_by_id, calculate_device_risk_score
+from ..common.alerts import record_security_alert
 import logging
 import json
 
@@ -100,6 +101,18 @@ def get_max_allowed_risk(resource_sensitivity: str) -> float:
 async def log_access_attempt(access_data: AccessLogCreate, decision: AccessDecision):
     """Log an access attempt in the database"""
     now = datetime.utcnow()
+    
+    if not decision.access_granted:
+    # Если доступ запрещен, создаем оповещение
+        await record_security_alert(
+            alert_type="unauthorized_access",
+            title="Unauthorized access attempt",
+            description=f"Attempted access to {access_data.resource} from IP {access_data.ip_address}",
+            severity="medium",
+            source_ip=access_data.ip_address,
+            device_id=access_data.device_id,
+            user_id=access_data.user_id
+        )
     
     # Create access log entry
     access_log = {
@@ -217,3 +230,75 @@ async def get_access_statistics(start_time: datetime = None, end_time: datetime 
             stats["denied"] = r["count"]
     
     return stats
+
+async def record_security_alert(
+    alert_type: str,
+    title: str,
+    description: str,
+    severity: str,
+    source_ip: Optional[str] = None,
+    device_id: Optional[str] = None,
+    user_id: Optional[str] = None
+):
+    """Записать оповещение безопасности в базу данных"""
+    alert = {
+        "alert_type": alert_type,
+        "title": title,
+        "description": description,
+        "severity": severity,
+        "source_ip": source_ip,
+        "device_id": device_id,
+        "user_id": user_id,
+        "timestamp": datetime.utcnow(),
+        "resolved": False
+    }
+    
+    result = await db.db.security_alerts.insert_one(alert)
+    alert["id"] = str(result.inserted_id)
+    alert.pop("_id", None)
+    
+    return alert
+
+async def get_recent_alerts(limit: int = 5, resolved: bool = False) -> List[dict]:
+    """Получить последние оповещения безопасности"""
+    query = {"resolved": resolved}
+    
+    alerts = []
+    cursor = db.db.security_alerts.find(query).sort("timestamp", -1).limit(limit)
+    
+    async for alert in cursor:
+        alert["id"] = str(alert["_id"])
+        alert.pop("_id", None)
+        alerts.append(alert)
+    
+    return alerts
+
+# Функция для генерации тестовых оповещений, если их нет в базе
+async def generate_sample_alerts():
+    """Создать несколько тестовых оповещений, если в базе ничего нет"""
+    count = await db.db.security_alerts.count_documents({})
+    
+    if count == 0:
+        # Создаем несколько тестовых оповещений
+        await record_security_alert(
+            alert_type="login_failure",
+            title="Multiple login failures detected",
+            description="5 failed login attempts from IP 192.168.1.25",
+            severity="high",
+            source_ip="192.168.1.25"
+        )
+        
+        await record_security_alert(
+            alert_type="new_device",
+            title="New device connected",
+            description="Unrecognized device with high risk score",
+            severity="medium",
+            device_id="test-device-003"
+        )
+        
+        await record_security_alert(
+            alert_type="system_update",
+            title="System update available",
+            description="Security patch available for 12 devices",
+            severity="low"
+        )

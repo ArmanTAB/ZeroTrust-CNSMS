@@ -3,12 +3,23 @@ from datetime import datetime
 from ..db import db
 from .models import DeviceCreate, DeviceUpdate, DeviceStatus
 import logging
+from ..common.alerts import record_security_alert
 
 logger = logging.getLogger(__name__)
 
 async def register_device(device_data: DeviceCreate):
     """Register a new device in the system"""
     now = datetime.utcnow()
+    
+    if not existing_device and not device_data.is_trusted:
+        await record_security_alert(
+            alert_type="new_device",
+            title="New untrusted device connected",
+            description=f"New device {device_data.hostname} ({device_data.device_type}) with IP {device_data.ip_address}",
+            severity="medium",
+            source_ip=device_data.ip_address,
+            device_id=device_data.device_id
+    )
     
     # Check if device already exists
     existing_device = await db.db.devices.find_one({"device_id": device_data.device_id})
