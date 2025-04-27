@@ -1,15 +1,18 @@
 // src/App.tsx
-import React from 'react';
-import { BrowserRouter } from 'react-router-dom';
-import { AuthProvider } from './store/AuthContext';
-import AppRoutes from './routes';
-import './index.css';
+import React from "react";
+import { BrowserRouter } from "react-router-dom";
+import { AuthProvider } from "./store/AuthContext";
+import { ToastProvider } from "./store/ToastContext";
+import AppRoutes from "./routes";
+import "./index.css";
 
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <ToastProvider>
+          <AppRoutes />
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );

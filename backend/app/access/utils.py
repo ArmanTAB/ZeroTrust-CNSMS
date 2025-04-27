@@ -1,4 +1,5 @@
 # backend/app/access/utils.py
+from .models import AccessLogCreate, AccessDecision
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from ..db import db
