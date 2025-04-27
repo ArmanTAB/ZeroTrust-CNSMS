@@ -16,6 +16,7 @@ export interface User {
   created_at: string;
   last_login?: string;
   is_active: boolean;
+  is_verified: boolean; // Added verification status
 }
 
 export interface LoginCredentials {
@@ -33,6 +34,20 @@ export interface RegisterData {
 export interface AuthResponse {
   access_token: string;
   token_type: string;
+}
+
+export interface VerificationRequest {
+  email: string;
+  code: string;
+}
+
+export interface ResendVerificationRequest {
+  email: string;
+}
+
+export interface VerificationStatus {
+  is_verified: boolean;
+  email: string;
 }
 
 // Типы для устройств

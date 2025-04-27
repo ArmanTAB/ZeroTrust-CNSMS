@@ -72,14 +72,14 @@ const RegisterPage: React.FC = () => {
       const { confirmPassword, ...registerData } = formData;
       await AuthApi.register(registerData);
 
-      // After successful registration, redirect to login page
+      // After successful registration, redirect to email verification page
       showToast(
-        "Registration successful! You can now log in to the system.",
+        "Registration successful! Please verify your email.",
         "success"
       );
-      navigate("/login", {
+      navigate("/verify-email", {
         state: {
-          message: "Registration successful! You can now log in to the system.",
+          email: registerData.email,
         },
       });
     } catch (err: any) {

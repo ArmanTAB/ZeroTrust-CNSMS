@@ -5,8 +5,14 @@ from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from typing import Annotated, Optional
 from ..config import settings
-from .utils import verify_password, create_access_token, get_user_by_email, create_user
-from .models import UserCreate, UserLogin, User, Token, UserInDB
+from .utils import (
+    verify_password, create_access_token, get_user_by_email, create_user,
+    verify_user_email, resend_verification_email
+)
+from .models import (
+    UserCreate, UserLogin, User, Token, UserInDB, 
+    VerificationRequest, ResendVerificationRequest
+)
 from ..db import db
 import logging
 
@@ -40,7 +46,8 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
         role=user["role"],
         created_at=user["created_at"],
         last_login=user.get("last_login"),
-        is_active=user["is_active"]
+        is_active=user["is_active"],
+        is_verified=user.get("is_verified", False)
     )
 
 @router.post("/register", response_model=User)
@@ -63,7 +70,8 @@ async def register(user_data: UserCreate):
         full_name=user["full_name"],
         role=user["role"],
         created_at=user["created_at"],
-        is_active=user["is_active"]
+        is_active=user["is_active"],
+        is_verified=user.get("is_verified", False)
     )
 
 @router.post("/token", response_model=Token)
@@ -75,6 +83,13 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Check if user is verified
+    if not user.get("is_verified", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email not verified. Please verify your email before logging in."
         )
     
     # Update last login
@@ -96,3 +111,45 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
 async def read_users_me(current_user: Annotated[User, Depends(get_current_user)]):
     """Get current user info"""
     return current_user
+
+@router.post("/verify-email")
+async def verify_email(verification_data: VerificationRequest):
+    """Verify user email with verification code"""
+    result = await verify_user_email(verification_data.email, verification_data.code)
+    
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result["message"]
+        )
+    
+    return {"status": "success", "message": result["message"]}
+
+@router.post("/resend-verification")
+async def resend_verification(resend_data: ResendVerificationRequest):
+    """Resend verification email"""
+    result = await resend_verification_email(resend_data.email)
+    
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result["message"]
+        )
+    
+    return {"status": "success", "message": result["message"]}
+
+@router.get("/verification-status/{email}")
+async def get_verification_status(email: str):
+    """Check if a user's email is verified"""
+    user = await get_user_by_email(email)
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    return {
+        "is_verified": user.get("is_verified", False),
+        "email": user["email"]
+    }

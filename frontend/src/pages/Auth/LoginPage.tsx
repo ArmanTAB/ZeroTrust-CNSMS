@@ -9,9 +9,10 @@ const LoginPage: React.FC = () => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isAuthenticated, user } = useAuth();
+  const { login, isAuthenticated, user, error } = useAuth();
   const { showToast } = useToast();
 
   // If user is already authenticated, redirect to dashboard
@@ -33,6 +34,7 @@ const LoginPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMessage(null);
 
     try {
       await login(email, password);
@@ -41,6 +43,27 @@ const LoginPage: React.FC = () => {
       navigate("/dashboard");
     } catch (err: any) {
       console.error("Login error:", err);
+
+      // Handle verification error
+      if (err.message && err.message.includes("Email not verified")) {
+        showToast(
+          "Your email is not verified. Please verify your email before logging in.",
+          "error"
+        );
+        // Redirect to verification page
+        navigate("/verify-email", {
+          state: {
+            email: email,
+          },
+        });
+        return;
+      }
+
+      // Set error message to display on the form
+      setErrorMessage(
+        err.message || "Login failed. Please check your credentials."
+      );
+
       showToast(
         err.message || "Login failed. Please check your credentials.",
         "error"
@@ -83,6 +106,15 @@ const LoginPage: React.FC = () => {
           </div>
 
           <div className="px-6 py-8">
+            {errorMessage && (
+              <div
+                className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative"
+                role="alert"
+              >
+                <span className="block sm:inline">{errorMessage}</span>
+              </div>
+            )}
+
             <form className="space-y-6" onSubmit={handleSubmit}>
               <div>
                 <label

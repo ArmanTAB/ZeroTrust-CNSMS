@@ -9,3 +9,5 @@ python-dotenv
 bcrypt
 email-validator
 motor
+jinja2  
+secure-smtplib

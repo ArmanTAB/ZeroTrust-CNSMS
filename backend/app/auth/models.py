@@ -28,6 +28,9 @@ class UserInDB(BaseModel):
     created_at: datetime
     last_login: Optional[datetime] = None
     is_active: bool = True
+    is_verified: bool = False  # New field for email verification
+    verification_code: Optional[str] = None  # Store verification code
+    verification_sent_at: Optional[datetime] = None  # Track when verification was sent
     
     model_config = {
         "populate_by_name": True
@@ -41,6 +44,7 @@ class User(BaseModel):
     created_at: datetime
     last_login: Optional[datetime] = None
     is_active: bool = True
+    is_verified: bool = False  # New field for email verification
 
 class Token(BaseModel):
     access_token: str
@@ -49,3 +53,11 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: Optional[str] = None
     user_id: Optional[str] = None
+
+# New models for email verification
+class VerificationRequest(BaseModel):
+    email: EmailStr
+    code: str
+    
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
