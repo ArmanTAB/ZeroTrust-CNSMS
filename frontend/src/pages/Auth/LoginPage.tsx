@@ -12,15 +12,35 @@ const LoginPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isAuthenticated, user, error } = useAuth();
+  const {
+    login,
+    isAuthenticated,
+    user,
+    error,
+    loading: authLoading,
+  } = useAuth();
   const { showToast } = useToast();
 
-  // If user is already authenticated, redirect to dashboard
+  // Check if there's a redirect location from state or session storage
   useEffect(() => {
-    if (isAuthenticated && user) {
-      navigate("/dashboard");
+    // If already authenticated, redirect to the appropriate page
+    if (isAuthenticated && user && !authLoading) {
+      // Check if we have a stored redirect path
+      const redirectPath = sessionStorage.getItem("redirectAfterLogin");
+
+      if (redirectPath) {
+        // Clear the stored path
+        sessionStorage.removeItem("redirectAfterLogin");
+        navigate(redirectPath);
+      } else if (location.state?.from) {
+        // Use the from property if available in location state
+        navigate(location.state.from);
+      } else {
+        // Default to dashboard
+        navigate("/dashboard");
+      }
     }
-  }, [isAuthenticated, user, navigate]);
+  }, [isAuthenticated, user, authLoading, navigate, location.state]);
 
   // Check for message in location state (e.g., after successful registration)
   useEffect(() => {
@@ -38,9 +58,8 @@ const LoginPage: React.FC = () => {
 
     try {
       await login(email, password);
-      // After successful login, redirect user to dashboard
+      // After successful login, redirect is handled by the useEffect above
       showToast("You have successfully logged in!", "success");
-      navigate("/dashboard");
     } catch (err: any) {
       console.error("Login error:", err);
 
@@ -72,6 +91,32 @@ const LoginPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // If we're still checking authentication status, show a loading indicator
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
+        <div className="flex flex-col items-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          <p className="mt-4 text-gray-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Only render the login form if not authenticated
+  if (isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
+        <div className="flex flex-col items-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          <p className="mt-4 text-gray-600">
+            You are already logged in. Redirecting...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 py-12 px-4 sm:px-6 lg:px-8">

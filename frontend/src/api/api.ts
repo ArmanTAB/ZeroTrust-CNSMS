@@ -1,10 +1,10 @@
 // src/api/api.ts
 import axios, { AxiosRequestConfig } from "axios";
 
-// Базовый URL API
+// Base API URL
 const API_URL = "http://localhost:8000";
 
-// Создаем экземпляр axios с базовой конфигурацией
+// Create axios instance with base configuration
 const api = axios.create({
   baseURL: API_URL,
   headers: {
@@ -12,7 +12,7 @@ const api = axios.create({
   },
 });
 
-// Интерцептор для добавления токена авторизации
+// Add token to requests
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
@@ -24,16 +24,36 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Интерцептор для обработки ошибок авторизации
+// Global error handler
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // Если ошибка авторизации (401), перенаправляем на страницу логина
+    // Handle authentication errors (401)
     if (error.response && error.response.status === 401) {
+      // Clear invalid token
       localStorage.removeItem("token");
-      // Важно: используйте navigate вместо window.location.href
-      // window.location.href = "/login"; // Эта строка вызывает перезагрузку страницы
+
+      // Get current page path to potentially redirect back after login
+      const currentPath = window.location.pathname;
+
+      // Only redirect to login if we're not already on a non-protected route
+      const nonProtectedRoutes = [
+        "/login",
+        "/register",
+        "/verify-email",
+        "/forgot-password",
+        "/reset-password",
+      ];
+      if (!nonProtectedRoutes.some((route) => currentPath.startsWith(route))) {
+        // Store current location to redirect back after login
+        sessionStorage.setItem("redirectAfterLogin", currentPath);
+
+        // Use window.location for a full page refresh
+        // This is better than using React Router navigate for auth-related full resets
+        window.location.href = "/login";
+      }
     }
+
     return Promise.reject(error);
   }
 );
