@@ -153,3 +153,13 @@ async def get_verification_status(email: str):
         "is_verified": user.get("is_verified", False),
         "email": user["email"]
     }
+    
+@router.get("/check-email/{email}")
+async def check_email_exists(email: str):
+    """Check if an email already exists in the system"""
+    user = await get_user_by_email(email)
+    
+    if user:
+        return {"exists": True}
+    else:
+        return {"exists": False}

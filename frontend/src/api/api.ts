@@ -31,7 +31,8 @@ api.interceptors.response.use(
     // Если ошибка авторизации (401), перенаправляем на страницу логина
     if (error.response && error.response.status === 401) {
       localStorage.removeItem("token");
-      window.location.href = "/login";
+      // Важно: используйте navigate вместо window.location.href
+      // window.location.href = "/login"; // Эта строка вызывает перезагрузку страницы
     }
     return Promise.reject(error);
   }

@@ -91,6 +91,18 @@ const AuthApi = {
     );
     return response.data;
   },
+
+  checkEmailExists: async (email: string): Promise<boolean> => {
+    try {
+      await api.get<VerificationStatus>(`/auth/verification-status/${email}`);
+      return true;
+    } catch (error: any) {
+      if (error.response && error.response.status === 404) {
+        return false;
+      }
+      throw error;
+    }
+  },
 };
 
 export default AuthApi;

@@ -26,7 +26,8 @@ const RegisterPage: React.FC = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleNextStep = (e: React.FormEvent) => {
+  // src/pages/Auth/RegisterPage.tsx - модифицируем handleNextStep
+  const handleNextStep = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Validate step 1 fields
@@ -42,6 +43,34 @@ const RegisterPage: React.FC = () => {
         showToast("Please enter a valid email address", "error");
         return;
       }
+
+      // Check if email already exists
+      setLoading(true);
+      try {
+        const emailExists = await AuthApi.checkEmailExists(formData.email);
+        if (emailExists) {
+          showToast(
+            "Email already registered. Please use a different email or login.",
+            "error"
+          );
+          setLoading(false);
+          return;
+        }
+
+        // If email doesn't exist, proceed to next step
+        setCurrentStep(2);
+      } catch (err: any) {
+        console.error("Email check error:", err);
+        // If there's an error checking, we'll let the user proceed and check again on final submit
+        showToast(
+          "Could not verify email uniqueness. You can proceed, but registration may fail later.",
+          "warning"
+        );
+        setCurrentStep(2);
+      } finally {
+        setLoading(false);
+      }
+      return;
     }
 
     setCurrentStep(2);
@@ -51,6 +80,7 @@ const RegisterPage: React.FC = () => {
     setCurrentStep(1);
   };
 
+  // src/pages/Auth/RegisterPage.tsx - обновляем handleSubmit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -84,10 +114,19 @@ const RegisterPage: React.FC = () => {
       });
     } catch (err: any) {
       console.error("Registration error:", err);
-      showToast(
-        err.response?.data?.detail || "Registration failed. Please try again.",
-        "error"
-      );
+      // Если ошибка связана с дублированием email, показываем соответствующее сообщение
+      if (err.response?.data?.detail?.includes("Email already registered")) {
+        showToast(
+          "Email already registered. Please use a different email.",
+          "error"
+        );
+      } else {
+        showToast(
+          err.response?.data?.detail ||
+            "Registration failed. Please try again.",
+          "error"
+        );
+      }
     } finally {
       setLoading(false);
     }
