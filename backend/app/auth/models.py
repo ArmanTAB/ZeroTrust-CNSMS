@@ -31,6 +31,8 @@ class UserInDB(BaseModel):
     is_verified: bool = False  # New field for email verification
     verification_code: Optional[str] = None  # Store verification code
     verification_sent_at: Optional[datetime] = None  # Track when verification was sent
+    password_reset_code: Optional[str] = None  # Store password reset code
+    password_reset_sent_at: Optional[datetime] = None  # Track when reset code was sent
     
     model_config = {
         "populate_by_name": True
@@ -54,10 +56,19 @@ class TokenData(BaseModel):
     email: Optional[str] = None
     user_id: Optional[str] = None
 
-# New models for email verification
+# Email verification models
 class VerificationRequest(BaseModel):
     email: EmailStr
     code: str
     
 class ResendVerificationRequest(BaseModel):
     email: EmailStr
+
+# Password reset models
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+    
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str

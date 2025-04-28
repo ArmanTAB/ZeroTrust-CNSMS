@@ -7,11 +7,13 @@ from typing import Annotated, Optional
 from ..config import settings
 from .utils import (
     verify_password, create_access_token, get_user_by_email, create_user,
-    verify_user_email, resend_verification_email
+    verify_user_email, resend_verification_email, request_password_reset,
+    reset_password
 )
 from .models import (
     UserCreate, UserLogin, User, Token, UserInDB, 
-    VerificationRequest, ResendVerificationRequest
+    VerificationRequest, ResendVerificationRequest,
+    PasswordResetRequest, ResetPasswordRequest
 )
 from ..db import db
 import logging
@@ -163,3 +165,29 @@ async def check_email_exists(email: str):
         return {"exists": True}
     else:
         return {"exists": False}
+
+@router.post("/request-password-reset")
+async def request_password_reset_route(reset_data: PasswordResetRequest):
+    """Request a password reset code via email"""
+    result = await request_password_reset(reset_data.email)
+    
+    # Always return success for security reasons
+    # Even if the email doesn't exist in our system
+    return {"status": "success", "message": "If your email is registered, a password reset code has been sent"}
+
+@router.post("/reset-password")
+async def reset_password_route(reset_data: ResetPasswordRequest):
+    """Reset password using reset code and new password"""
+    result = await reset_password(
+        reset_data.email, 
+        reset_data.code, 
+        reset_data.new_password
+    )
+    
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result["message"]
+        )
+    
+    return {"status": "success", "message": result["message"]}

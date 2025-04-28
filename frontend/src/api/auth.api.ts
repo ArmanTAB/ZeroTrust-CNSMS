@@ -8,6 +8,8 @@ import {
   VerificationRequest,
   ResendVerificationRequest,
   VerificationStatus,
+  PasswordResetRequest,
+  PasswordResetVerifyRequest,
 } from "../types";
 
 const AuthApi = {
@@ -102,6 +104,34 @@ const AuthApi = {
       }
       throw error;
     }
+  },
+
+  /**
+   * Request password reset code
+   * @param email The email to send the reset code to
+   */
+  requestPasswordReset: async (
+    email: string
+  ): Promise<{ status: string; message: string }> => {
+    const response = await api.post<{ status: string; message: string }>(
+      "/auth/request-password-reset",
+      { email }
+    );
+    return response.data;
+  },
+
+  /**
+   * Verify password reset code and set new password
+   * @param data Contains email, reset code, and new password
+   */
+  resetPassword: async (
+    data: PasswordResetVerifyRequest
+  ): Promise<{ status: string; message: string }> => {
+    const response = await api.post<{ status: string; message: string }>(
+      "/auth/reset-password",
+      data
+    );
+    return response.data;
   },
 };
 

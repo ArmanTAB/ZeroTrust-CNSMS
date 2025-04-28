@@ -9,7 +9,7 @@ import uuid
 from bson.objectid import ObjectId
 import random
 import string
-from ..common.email_utils import send_verification_email
+from ..common.email_utils import send_verification_email, send_password_reset_email
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -141,3 +141,67 @@ async def resend_verification_email(email: str):
         return {"success": True, "message": "Verification email sent successfully"}
     else:
         return {"success": False, "message": "Failed to send verification email"}
+
+async def request_password_reset(email: str):
+    """Request a password reset and send reset code email"""
+    # Find the user
+    user = await get_user_by_email(email)
+    if not user:
+        # For security reasons, we'll pretend the email was sent
+        return {"success": True, "message": "If your email is registered, a password reset code has been sent"}
+    
+    # Generate reset code
+    reset_code = generate_verification_code(settings.VERIFICATION_CODE_LENGTH)
+    now = datetime.utcnow()
+    
+    # Update user with reset code
+    await db.db.users.update_one(
+        {"email": email},
+        {"$set": {
+            "password_reset_code": reset_code,
+            "password_reset_sent_at": now
+        }}
+    )
+    
+    # Send reset email
+    email_sent = send_password_reset_email(
+        recipient_email=email,
+        reset_code=reset_code,
+        full_name=user["full_name"]
+    )
+    
+    if email_sent:
+        return {"success": True, "message": "Password reset code sent successfully"}
+    else:
+        return {"success": False, "message": "Failed to send password reset code"}
+
+async def reset_password(email: str, code: str, new_password: str):
+    """Reset user password using the reset code"""
+    # Find the user
+    user = await get_user_by_email(email)
+    if not user:
+        return {"success": False, "message": "User not found"}
+    
+    # Check reset code
+    if user.get("password_reset_code") != code:
+        return {"success": False, "message": "Invalid reset code"}
+    
+    # Check if code has expired
+    if user.get("password_reset_sent_at"):
+        sent_at = user["password_reset_sent_at"]
+        expiry_time = sent_at + timedelta(hours=settings.VERIFICATION_CODE_EXPIRY_HOURS)
+        if datetime.utcnow() > expiry_time:
+            return {"success": False, "message": "Reset code has expired"}
+    
+    # Update password
+    hashed_password = get_password_hash(new_password)
+    
+    await db.db.users.update_one(
+        {"email": email},
+        {"$set": {
+            "hashed_password": hashed_password,
+            "password_reset_code": None
+        }}
+    )
+    
+    return {"success": True, "message": "Password reset successfully"}

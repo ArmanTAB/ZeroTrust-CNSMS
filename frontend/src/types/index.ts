@@ -50,6 +50,17 @@ export interface VerificationStatus {
   email: string;
 }
 
+// Password Reset interfaces
+export interface PasswordResetRequest {
+  email: string;
+}
+
+export interface PasswordResetVerifyRequest {
+  email: string;
+  code: string;
+  new_password: string;
+}
+
 // Типы для устройств
 export enum DeviceType {
   WORKSTATION = "workstation",

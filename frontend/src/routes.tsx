@@ -4,6 +4,8 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "./pages/Auth/LoginPage";
 import RegisterPage from "./pages/Auth/RegisterPage";
 import VerifyEmailPage from "./pages/Auth/VerifyEmailPage";
+import ForgotPasswordPage from "./pages/Auth/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/Auth/ResetPasswordPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import DashboardPage from "./pages/Dashboard/DashboardPage";
 import DevicesPage from "./pages/Devices/DevicesPage";
@@ -18,6 +20,8 @@ const AppRoutes: React.FC = () => {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       {/* Защищенные маршруты */}
       <Route element={<ProtectedRoute />}>
