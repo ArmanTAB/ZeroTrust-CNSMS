@@ -25,17 +25,7 @@ const DeviceDetailsPage: React.FC = () => {
   const [statusUpdating, setStatusUpdating] = useState<boolean>(false);
   const [editMode, setEditMode] = useState<boolean>(false);
   const [updateData, setUpdateData] = useState<DeviceUpdate>({});
-
-  // Имитация исторических данных для графика (в реальном приложении получали бы это с API)
-  const [riskHistory] = useState<any[]>([
-    { date: "2025-04-20", risk: 10 },
-    { date: "2025-04-21", risk: 15 },
-    { date: "2025-04-22", risk: 25 },
-    { date: "2025-04-23", risk: 20 },
-    { date: "2025-04-24", risk: 35 },
-    { date: "2025-04-25", risk: 30 },
-    { date: "2025-04-26", risk: device?.risk_score || 0 },
-  ]);
+  const [riskHistory, setRiskHistory] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchDeviceDetails = async () => {
@@ -46,7 +36,7 @@ const DeviceDetailsPage: React.FC = () => {
         const deviceData = await DevicesApi.getDeviceById(deviceId);
         setDevice(deviceData);
 
-        // Инициализируем форму редактирования текущими данными
+        // Initialize form with current data
         setUpdateData({
           hostname: deviceData.hostname,
           os_type: deviceData.os_type,
@@ -54,9 +44,13 @@ const DeviceDetailsPage: React.FC = () => {
           is_trusted: deviceData.is_trusted,
         });
 
-        // Получаем данные о риске
+        // Get risk data
         const riskData = await DevicesApi.getDeviceRisk(deviceId);
         setRiskInfo(riskData);
+
+        // Fetch risk history data
+        const historyData = await DevicesApi.getDeviceRiskHistory(deviceId, 7);
+        setRiskHistory(historyData);
       } catch (err: any) {
         console.error("Error fetching device details:", err);
         setError(err.message || "Failed to fetch device details");
@@ -457,27 +451,62 @@ const DeviceDetailsPage: React.FC = () => {
       <div className="bg-white p-6 rounded-lg shadow-md mb-6">
         <h2 className="text-xl font-semibold mb-4">Risk History</h2>
         <div style={{ width: "100%", height: 300 }}>
-          {/* @ts-ignore */}
-          <LineChart width={800} height={300} data={riskHistory}>
-            {/* @ts-ignore */}
-            <CartesianGrid strokeDasharray="3 3" />
-            {/* @ts-ignore */}
-            <XAxis dataKey="date" />
-            {/* @ts-ignore */}
-            <YAxis domain={[0, 100]} />
-            {/* @ts-ignore */}
-            <Tooltip />
-            {/* @ts-ignore */}
-            <Legend />
-            {/* @ts-ignore */}
-            <Line
-              type="monotone"
-              dataKey="risk"
-              stroke="#3B82F6"
-              activeDot={{ r: 8 }}
-              name="Risk Score"
-            />
-          </LineChart>
+          {riskHistory.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={riskHistory}
+                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(value: string | number) =>
+                    new Date(value).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    })
+                  }
+                />
+                <YAxis domain={[0, 100]} />
+                <Tooltip
+                  labelFormatter={(value: string | number) =>
+                    `Date: ${new Date(value).toLocaleDateString()}`
+                  }
+                  formatter={(value: string | number) => [`Risk Score: ${value}`, "Risk"]}
+                />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="risk"
+                  stroke="#3B82F6"
+                  activeDot={{ r: 8 }}
+                  name="Risk Score"
+                  strokeWidth={2}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <svg
+                  className="mx-auto h-12 w-12 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                  />
+                </svg>
+                <p className="mt-2 text-gray-500">
+                  No risk history data available
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

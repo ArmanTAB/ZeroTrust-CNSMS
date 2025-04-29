@@ -96,6 +96,31 @@ const DevicesApi = {
       };
     }
   },
+
+  // Add this new method to the DevicesApi object in frontend/src/api/devices.api.ts
+
+  /**
+   * Get risk history for a device
+   */
+  getDeviceRiskHistory: async (
+    deviceId: string,
+    days: number = 7
+  ): Promise<any[]> => {
+    try {
+      const response = await api.get<any[]>(
+        `/devices/${deviceId}/risk-history`,
+        {
+          params: { days },
+        }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching device risk history:", error);
+
+      // Return empty array in case of error
+      return [];
+    }
+  },
 };
 
 export default DevicesApi;
