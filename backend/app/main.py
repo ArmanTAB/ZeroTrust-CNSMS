@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.auth.routes import router as auth_router
 from app.devices.routes import router as devices_router
 from app.access.routes import router as access_router
+from app.devices.vulnerability_routes import router as vulnerability_router
 from app.db import connect_to_mongo, close_mongo_connection
 import logging
 
@@ -42,6 +43,7 @@ async def shutdown_db_client():
 app.include_router(auth_router)
 app.include_router(devices_router)
 app.include_router(access_router)
+app.include_router(vulnerability_router)  # Добавляем маршруты для уязвимостей
 
 @app.get("/")
 async def root():

@@ -13,11 +13,22 @@ import {
 } from "recharts";
 import MainLayout from "../../components/Layout/MainLayout";
 import DevicesApi from "../../api/devices.api";
-import { Device, DeviceStatus, DeviceUpdate } from "../../types";
+import VulnerabilitiesApi from "../../api/vulnerabilities.api";
+import {
+  Device,
+  DeviceStatus,
+  DeviceUpdate,
+  Vulnerability,
+  VulnerabilityCreate,
+  VulnerabilitySeverity,
+  VulnerabilityStatus,
+} from "../../types";
+import { useToast } from "../../store/ToastContext";
 
 const DeviceDetailsPage: React.FC = () => {
   const { deviceId } = useParams<{ deviceId: string }>();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [device, setDevice] = useState<Device | null>(null);
   const [riskInfo, setRiskInfo] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -26,6 +37,50 @@ const DeviceDetailsPage: React.FC = () => {
   const [editMode, setEditMode] = useState<boolean>(false);
   const [updateData, setUpdateData] = useState<DeviceUpdate>({});
   const [riskHistory, setRiskHistory] = useState<any[]>([]);
+  const [vulnerabilities, setVulnerabilities] = useState<Vulnerability[]>([]);
+  const [vulnerabilitiesLoading, setVulnerabilitiesLoading] =
+    useState<boolean>(false);
+  const [showVulnerabilityModal, setShowVulnerabilityModal] =
+    useState<boolean>(false);
+  const [newVulnerability, setNewVulnerability] = useState<VulnerabilityCreate>(
+    {
+      title: "",
+      description: "",
+      severity: VulnerabilitySeverity.MEDIUM,
+      status: VulnerabilityStatus.OPEN,
+    }
+  );
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  const toggleMenu = (vulnerabilityId: string) => {
+    if (openMenuId === vulnerabilityId) {
+      // Если это меню уже открыто - закрываем его
+      setOpenMenuId(null);
+    } else {
+      // Иначе закрываем предыдущее и открываем новое
+      setOpenMenuId(vulnerabilityId);
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      // Если меню открыто и клик был не по меню или его содержимому
+      if (
+        openMenuId !== null &&
+        !(event.target as Element).closest(".vulnerability-menu")
+      ) {
+        setOpenMenuId(null);
+      }
+    };
+
+    // Добавляем обработчик событий
+    document.addEventListener("mousedown", handleClickOutside);
+
+    // Удаляем обработчик при размонтировании компонента
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [openMenuId]);
 
   useEffect(() => {
     const fetchDeviceDetails = async () => {
@@ -51,6 +106,9 @@ const DeviceDetailsPage: React.FC = () => {
         // Fetch risk history data
         const historyData = await DevicesApi.getDeviceRiskHistory(deviceId, 7);
         setRiskHistory(historyData);
+
+        // Fetch vulnerabilities
+        await fetchVulnerabilities();
       } catch (err: any) {
         console.error("Error fetching device details:", err);
         setError(err.message || "Failed to fetch device details");
@@ -62,6 +120,22 @@ const DeviceDetailsPage: React.FC = () => {
     fetchDeviceDetails();
   }, [deviceId]);
 
+  const fetchVulnerabilities = async () => {
+    if (!deviceId) return;
+
+    setVulnerabilitiesLoading(true);
+    try {
+      const vulnerabilityData =
+        await VulnerabilitiesApi.getDeviceVulnerabilities(deviceId);
+      setVulnerabilities(vulnerabilityData);
+    } catch (err: any) {
+      console.error("Error fetching vulnerabilities:", err);
+      showToast(err.message || "Failed to fetch vulnerabilities", "error");
+    } finally {
+      setVulnerabilitiesLoading(false);
+    }
+  };
+
   // Обработчик изменения статуса устройства
   const handleStatusUpdate = async (newStatus: DeviceStatus) => {
     if (!deviceId || !device) return;
@@ -72,9 +146,11 @@ const DeviceDetailsPage: React.FC = () => {
 
       // Обновляем локальное состояние
       setDevice((prev) => (prev ? { ...prev, status: newStatus } : null));
+      showToast(`Device status updated to ${newStatus}`, "success");
     } catch (err: any) {
       console.error("Error updating device status:", err);
       setError(err.message || "Failed to update device status");
+      showToast(err.message || "Failed to update device status", "error");
     } finally {
       setStatusUpdating(false);
     }
@@ -93,6 +169,20 @@ const DeviceDetailsPage: React.FC = () => {
     }));
   };
 
+  // Обработчик изменения полей новой уязвимости
+  const handleVulnerabilityInputChange = (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >
+  ) => {
+    const { name, value } = e.target;
+
+    setNewVulnerability((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
   // Обработчик сохранения изменений
   const handleSaveChanges = async () => {
     if (!deviceId || !device) return;
@@ -101,9 +191,124 @@ const DeviceDetailsPage: React.FC = () => {
       const updatedDevice = await DevicesApi.updateDevice(deviceId, updateData);
       setDevice(updatedDevice);
       setEditMode(false);
+      showToast("Device information updated successfully", "success");
     } catch (err: any) {
       console.error("Error updating device:", err);
       setError(err.message || "Failed to update device");
+      showToast(err.message || "Failed to update device", "error");
+    }
+  };
+
+  // Обработчик добавления новой уязвимости
+  const handleAddVulnerability = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deviceId) return;
+
+    try {
+      const result = await VulnerabilitiesApi.createVulnerability(
+        deviceId,
+        newVulnerability
+      );
+      if (result) {
+        setVulnerabilities([...vulnerabilities, result]);
+        setShowVulnerabilityModal(false);
+        setNewVulnerability({
+          title: "",
+          description: "",
+          severity: VulnerabilitySeverity.MEDIUM,
+          status: VulnerabilityStatus.OPEN,
+        });
+        showToast("Vulnerability added successfully", "success");
+
+        // Refresh device risk score
+        const riskData = await DevicesApi.getDeviceRisk(deviceId);
+        setRiskInfo(riskData);
+
+        // Refresh device data to get updated risk score
+        const deviceData = await DevicesApi.getDeviceById(deviceId);
+        setDevice(deviceData);
+      }
+    } catch (err: any) {
+      console.error("Error adding vulnerability:", err);
+      showToast(err.message || "Failed to add vulnerability", "error");
+    }
+  };
+
+  // Обработчик обновления статуса уязвимости
+  const handleUpdateVulnerabilityStatus = async (
+    vulnerabilityId: string,
+    newStatus: VulnerabilityStatus
+  ) => {
+    if (!deviceId) return;
+
+    try {
+      const result = await VulnerabilitiesApi.updateVulnerability(
+        deviceId,
+        vulnerabilityId,
+        {
+          status: newStatus,
+        }
+      );
+
+      if (result) {
+        // Обновляем массив уязвимостей
+        setVulnerabilities(
+          vulnerabilities.map((v) =>
+            v.id === vulnerabilityId ? { ...v, status: newStatus } : v
+          )
+        );
+        showToast(`Vulnerability status updated to ${newStatus}`, "success");
+
+        // Refresh device risk score
+        const riskData = await DevicesApi.getDeviceRisk(deviceId);
+        setRiskInfo(riskData);
+
+        // Refresh device data to get updated risk score
+        const deviceData = await DevicesApi.getDeviceById(deviceId);
+        setDevice(deviceData);
+      }
+    } catch (err: any) {
+      console.error("Error updating vulnerability status:", err);
+      showToast(
+        err.message || "Failed to update vulnerability status",
+        "error"
+      );
+    }
+  };
+
+  // Обработчик удаления уязвимости
+  const handleDeleteVulnerability = async (vulnerabilityId: string) => {
+    if (!deviceId) return;
+
+    if (
+      !window.confirm("Are you sure you want to delete this vulnerability?")
+    ) {
+      return;
+    }
+
+    try {
+      const result = await VulnerabilitiesApi.deleteVulnerability(
+        deviceId,
+        vulnerabilityId
+      );
+      if (result) {
+        // Удаляем уязвимость из массива
+        setVulnerabilities(
+          vulnerabilities.filter((v) => v.id !== vulnerabilityId)
+        );
+        showToast("Vulnerability deleted successfully", "success");
+
+        // Refresh device risk score
+        const riskData = await DevicesApi.getDeviceRisk(deviceId);
+        setRiskInfo(riskData);
+
+        // Refresh device data to get updated risk score
+        const deviceData = await DevicesApi.getDeviceById(deviceId);
+        setDevice(deviceData);
+      }
+    } catch (err: any) {
+      console.error("Error deleting vulnerability:", err);
+      showToast(err.message || "Failed to delete vulnerability", "error");
     }
   };
 
@@ -130,6 +335,38 @@ const DeviceDetailsPage: React.FC = () => {
     if (score <= 30) return { text: "Low", color: "text-green-600" };
     if (score <= 70) return { text: "Medium", color: "text-yellow-600" };
     return { text: "High", color: "text-red-600" };
+  };
+
+  // Функция для получения цвета по уровню серьезности уязвимости
+  const getSeverityColor = (severity: VulnerabilitySeverity) => {
+    switch (severity) {
+      case VulnerabilitySeverity.LOW:
+        return "bg-green-100 text-green-800";
+      case VulnerabilitySeverity.MEDIUM:
+        return "bg-yellow-100 text-yellow-800";
+      case VulnerabilitySeverity.HIGH:
+        return "bg-red-100 text-red-800";
+      case VulnerabilitySeverity.CRITICAL:
+        return "bg-purple-100 text-purple-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  // Функция для получения цвета по статусу уязвимости
+  const getVulnerabilityStatusColor = (status: VulnerabilityStatus) => {
+    switch (status) {
+      case VulnerabilityStatus.OPEN:
+        return "bg-red-100 text-red-800";
+      case VulnerabilityStatus.IN_PROGRESS:
+        return "bg-blue-100 text-blue-800";
+      case VulnerabilityStatus.RESOLVED:
+        return "bg-green-100 text-green-800";
+      case VulnerabilityStatus.ACCEPTED:
+        return "bg-yellow-100 text-yellow-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
   };
 
   if (loading) {
@@ -472,7 +709,10 @@ const DeviceDetailsPage: React.FC = () => {
                   labelFormatter={(value: string | number) =>
                     `Date: ${new Date(value).toLocaleDateString()}`
                   }
-                  formatter={(value: string | number) => [`Risk Score: ${value}`, "Risk"]}
+                  formatter={(value: string | number) => [
+                    `Risk Score: ${value}`,
+                    "Risk",
+                  ]}
                 />
                 <Legend />
                 <Line
@@ -512,8 +752,24 @@ const DeviceDetailsPage: React.FC = () => {
 
       {/* Уязвимости устройства */}
       <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold mb-4">Vulnerabilities</h2>
-        {device.vulnerabilities && device.vulnerabilities.length > 0 ? (
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold">Vulnerabilities</h2>
+          <button
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200"
+            onClick={() => setShowVulnerabilityModal(true)}
+          >
+            Add Vulnerability
+          </button>
+        </div>
+
+        {vulnerabilitiesLoading ? (
+          <div className="flex justify-center items-center h-32">
+            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+            <span className="ml-2 text-gray-600">
+              Loading vulnerabilities...
+            </span>
+          </div>
+        ) : vulnerabilities.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -522,7 +778,7 @@ const DeviceDetailsPage: React.FC = () => {
                     scope="col"
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                   >
-                    ID
+                    Title
                   </th>
                   <th
                     scope="col"
@@ -542,32 +798,156 @@ const DeviceDetailsPage: React.FC = () => {
                   >
                     Status
                   </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {device.vulnerabilities.map((vuln, index) => (
-                  <tr key={index}>
+                {vulnerabilities.map((vuln) => (
+                  <tr key={vuln.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {vuln.id || `VUL-${index + 1}`}
+                      <div>
+                        <div className="font-medium">{vuln.title}</div>
+                        {vuln.cve_id && (
+                          <div className="text-xs text-gray-500">
+                            {vuln.cve_id}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
-                        className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          vuln.severity === "high"
-                            ? "bg-red-100 text-red-800"
-                            : vuln.severity === "medium"
-                            ? "bg-yellow-100 text-yellow-800"
-                            : "bg-green-100 text-green-800"
-                        }`}
+                        className={`px-2 py-1 text-xs font-medium rounded-full ${getSeverityColor(
+                          vuln.severity
+                        )}`}
                       >
-                        {vuln.severity || "low"}
+                        {vuln.severity}
                       </span>
+                      {vuln.cvss_score && (
+                        <div className="mt-1 text-xs text-gray-500">
+                          CVSS: {vuln.cvss_score}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">
-                      {vuln.description || "No description"}
+                      <div
+                        className="max-w-md truncate"
+                        title={vuln.description}
+                      >
+                        {vuln.description}
+                      </div>
+                      {vuln.affected_component && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          Component: {vuln.affected_component}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`px-2 py-1 text-xs font-medium rounded-full ${getVulnerabilityStatusColor(
+                          vuln.status
+                        )}`}
+                      >
+                        {vuln.status}
+                      </span>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {new Date(vuln.created_at).toLocaleDateString()}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {vuln.status || "open"}
+                      <div className="flex space-x-2 vulnerability-menu">
+                        <div className="relative">
+                          <button
+                            className="text-gray-600 hover:text-blue-600"
+                            aria-label="Actions menu"
+                            title="Vulnerability actions"
+                            onClick={() => toggleMenu(vuln.id)}
+                          >
+                            <svg
+                              className="h-5 w-5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                              aria-hidden="true"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M4 6h16M4 12h16M4 18h16"
+                              />
+                            </svg>
+                          </button>
+                          {openMenuId === vuln.id && (
+                            <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-md border border-gray-100">
+                              <div className="py-1">
+                                {vuln.status !==
+                                  VulnerabilityStatus.IN_PROGRESS && (
+                                  <button
+                                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                    onClick={() => {
+                                      handleUpdateVulnerabilityStatus(
+                                        vuln.id,
+                                        VulnerabilityStatus.IN_PROGRESS
+                                      );
+                                      setOpenMenuId(null); // Закрываем меню после выбора действия
+                                    }}
+                                    aria-label="Mark vulnerability as in progress"
+                                  >
+                                    Mark In Progress
+                                  </button>
+                                )}
+                                {vuln.status !==
+                                  VulnerabilityStatus.RESOLVED && (
+                                  <button
+                                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                    onClick={() => {
+                                      handleUpdateVulnerabilityStatus(
+                                        vuln.id,
+                                        VulnerabilityStatus.RESOLVED
+                                      );
+                                      setOpenMenuId(null); // Закрываем меню после выбора действия
+                                    }}
+                                    aria-label="Mark vulnerability as resolved"
+                                  >
+                                    Mark Resolved
+                                  </button>
+                                )}
+                                {vuln.status !==
+                                  VulnerabilityStatus.ACCEPTED && (
+                                  <button
+                                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                    onClick={() => {
+                                      handleUpdateVulnerabilityStatus(
+                                        vuln.id,
+                                        VulnerabilityStatus.ACCEPTED
+                                      );
+                                      setOpenMenuId(null); // Закрываем меню после выбора действия
+                                    }}
+                                    aria-label="Accept vulnerability risk"
+                                  >
+                                    Accept Risk
+                                  </button>
+                                )}
+                                <button
+                                  className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                                  onClick={() => {
+                                    handleDeleteVulnerability(vuln.id);
+                                    setOpenMenuId(null); // Закрываем меню после выбора действия
+                                  }}
+                                  aria-label="Delete vulnerability"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -580,6 +960,222 @@ const DeviceDetailsPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Modal for adding a new vulnerability */}
+      {showVulnerabilityModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div
+              className="fixed inset-0 bg-black opacity-30"
+              onClick={() => setShowVulnerabilityModal(false)}
+            ></div>
+            <div className="bg-white rounded-lg shadow-xl z-50 w-full max-w-md p-6 relative">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-medium">Add New Vulnerability</h3>
+                <button
+                  className="text-gray-400 hover:text-gray-600"
+                  onClick={() => setShowVulnerabilityModal(false)}
+                  aria-label="Close modal"
+                  title="Close"
+                >
+                  <svg
+                    className="h-6 w-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+              <form onSubmit={handleAddVulnerability}>
+                <div className="mb-4">
+                  <label
+                    htmlFor="title"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Title *
+                  </label>
+                  <input
+                    type="text"
+                    id="title"
+                    name="title"
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    value={newVulnerability.title}
+                    onChange={handleVulnerabilityInputChange}
+                  />
+                </div>
+                <div className="mb-4">
+                  <label
+                    htmlFor="description"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Description *
+                  </label>
+                  <textarea
+                    id="description"
+                    name="description"
+                    required
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    value={newVulnerability.description}
+                    onChange={handleVulnerabilityInputChange}
+                  ></textarea>
+                </div>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label
+                      htmlFor="severity"
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                    >
+                      Severity *
+                    </label>
+                    <select
+                      id="severity"
+                      name="severity"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      value={newVulnerability.severity}
+                      onChange={handleVulnerabilityInputChange}
+                    >
+                      <option value={VulnerabilitySeverity.LOW}>Low</option>
+                      <option value={VulnerabilitySeverity.MEDIUM}>
+                        Medium
+                      </option>
+                      <option value={VulnerabilitySeverity.HIGH}>High</option>
+                      <option value={VulnerabilitySeverity.CRITICAL}>
+                        Critical
+                      </option>
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="status"
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                    >
+                      Status *
+                    </label>
+                    <select
+                      id="status"
+                      name="status"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      value={newVulnerability.status}
+                      onChange={handleVulnerabilityInputChange}
+                    >
+                      <option value={VulnerabilityStatus.OPEN}>Open</option>
+                      <option value={VulnerabilityStatus.IN_PROGRESS}>
+                        In Progress
+                      </option>
+                      <option value={VulnerabilityStatus.RESOLVED}>
+                        Resolved
+                      </option>
+                      <option value={VulnerabilityStatus.ACCEPTED}>
+                        Accepted
+                      </option>
+                    </select>
+                  </div>
+                </div>
+                <div className="mb-4">
+                  <label
+                    htmlFor="cve_id"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    CVE ID (optional)
+                  </label>
+                  <input
+                    type="text"
+                    id="cve_id"
+                    name="cve_id"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    value={newVulnerability.cve_id || ""}
+                    onChange={handleVulnerabilityInputChange}
+                    placeholder="e.g. CVE-2022-12345"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label
+                      htmlFor="cvss_score"
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                    >
+                      CVSS Score (optional)
+                    </label>
+                    <input
+                      type="number"
+                      id="cvss_score"
+                      name="cvss_score"
+                      min="0"
+                      max="10"
+                      step="0.1"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      value={newVulnerability.cvss_score || ""}
+                      onChange={handleVulnerabilityInputChange}
+                      placeholder="0.0 - 10.0"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="affected_component"
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                    >
+                      Affected Component (optional)
+                    </label>
+                    <input
+                      type="text"
+                      id="affected_component"
+                      name="affected_component"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      value={newVulnerability.affected_component || ""}
+                      onChange={handleVulnerabilityInputChange}
+                      placeholder="e.g. OS, Network, Application"
+                    />
+                  </div>
+                </div>
+                <div className="mb-4">
+                  <label
+                    htmlFor="remediation_steps"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Remediation Steps (optional)
+                  </label>
+                  <textarea
+                    id="remediation_steps"
+                    name="remediation_steps"
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    value={newVulnerability.remediation_steps || ""}
+                    onChange={handleVulnerabilityInputChange}
+                    placeholder="Describe how to resolve this vulnerability"
+                  ></textarea>
+                </div>
+                <div className="flex justify-end space-x-3 mt-6">
+                  <button
+                    type="button"
+                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                    onClick={() => setShowVulnerabilityModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  >
+                    Add Vulnerability
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </MainLayout>
   );
 };

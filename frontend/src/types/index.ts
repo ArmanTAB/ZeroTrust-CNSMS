@@ -170,3 +170,54 @@ export interface AccessStatistics {
     end: string;
   };
 }
+
+export enum VulnerabilitySeverity {
+  LOW = "low",
+  MEDIUM = "medium",
+  HIGH = "high",
+  CRITICAL = "critical",
+}
+
+export enum VulnerabilityStatus {
+  OPEN = "open",
+  IN_PROGRESS = "in_progress",
+  RESOLVED = "resolved",
+  ACCEPTED = "accepted",
+}
+
+export interface Vulnerability {
+  id: string;
+  device_id: string;
+  title: string;
+  description: string;
+  severity: VulnerabilitySeverity;
+  cve_id?: string;
+  cvss_score?: number;
+  affected_component?: string;
+  remediation_steps?: string;
+  status: VulnerabilityStatus;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface VulnerabilityCreate {
+  title: string;
+  description: string;
+  severity: VulnerabilitySeverity;
+  cve_id?: string;
+  cvss_score?: number;
+  affected_component?: string;
+  remediation_steps?: string;
+  status: VulnerabilityStatus;
+}
+
+export interface VulnerabilityUpdate {
+  title?: string;
+  description?: string;
+  severity?: VulnerabilitySeverity;
+  cve_id?: string;
+  cvss_score?: number;
+  affected_component?: string;
+  remediation_steps?: string;
+  status?: VulnerabilityStatus;
+}
