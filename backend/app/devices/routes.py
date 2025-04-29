@@ -8,7 +8,7 @@ from .models import DeviceCreate, DeviceUpdate, Device, DeviceStatus
 from .utils import (
     register_device, get_device_by_id, update_device, 
     set_device_status, calculate_device_risk_score, get_all_devices,
-    get_device_risk_history_data
+    get_device_risk_history_data, add_device_risk_history_record  # Added import here
 )
 import logging
 from ..db import db
@@ -237,7 +237,7 @@ async def add_risk_history_record(
     else:
         timestamp = datetime.utcnow()
     
-    # Add risk history record using the function defined in this file
+    # Add risk history record using the properly imported function
     result = await add_device_risk_history_record(device_id, risk_score, timestamp)
     
     return {"status": "success", "message": "Risk history record created", "record_id": result}

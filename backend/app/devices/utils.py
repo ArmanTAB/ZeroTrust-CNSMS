@@ -1,5 +1,5 @@
 # backend/app/devices/utils.py
-from datetime import datetime
+from datetime import datetime, timedelta
 from ..db import db
 from .models import DeviceCreate, DeviceUpdate, DeviceStatus
 import logging
@@ -11,6 +11,9 @@ async def register_device(device_data: DeviceCreate):
     """Register a new device in the system"""
     now = datetime.utcnow()
     
+    # Check if device already exists
+    existing_device = await db.db.devices.find_one({"device_id": device_data.device_id})
+    
     if not existing_device and not device_data.is_trusted:
         await record_security_alert(
             alert_type="new_device",
@@ -19,10 +22,7 @@ async def register_device(device_data: DeviceCreate):
             severity="medium",
             source_ip=device_data.ip_address,
             device_id=device_data.device_id
-    )
-    
-    # Check if device already exists
-    existing_device = await db.db.devices.find_one({"device_id": device_data.device_id})
+        )
     
     if existing_device:
         # Update last_seen field
@@ -147,9 +147,6 @@ async def calculate_device_risk_score(device_id: str):
     )
     
     return risk_score
-
-# Add this new function to backend/app/devices/utils.py
-# This should be added after the existing calculate_device_risk_score function
 
 async def get_device_risk_history_data(device_id: str, days: int = 7):
     """Get historical risk scores for a device
