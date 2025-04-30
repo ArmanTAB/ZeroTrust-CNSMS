@@ -4,12 +4,15 @@ import { Link } from "react-router-dom";
 import MainLayout from "../../components/Layout/MainLayout";
 import DevicesApi from "../../api/devices.api";
 import { Device, DeviceStatus, DeviceType } from "../../types";
+import NetworkScanModal from "../../components/Devices/NetworkScanModal";
 
 const DevicesPage: React.FC = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(true);
+  const [isNetworkScanModalOpen, setIsNetworkScanModalOpen] =
+    useState<boolean>(false);
 
   // Filter states
   const [filters, setFilters] = useState({
@@ -18,24 +21,25 @@ const DevicesPage: React.FC = () => {
     is_trusted: undefined as boolean | undefined,
   });
 
-  useEffect(() => {
-    const fetchDevices = async () => {
-      setLoading(true);
-      try {
-        const response = await DevicesApi.getAllDevices({
-          device_type: filters.device_type || undefined,
-          status: filters.status || undefined,
-          is_trusted: filters.is_trusted,
-        });
-        setDevices(response);
-      } catch (err: any) {
-        console.error("Error fetching devices:", err);
-        setError(err.message || "Failed to fetch devices");
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Extract fetchDevices to a separate function so it can be called after adding devices
+  const fetchDevices = async () => {
+    setLoading(true);
+    try {
+      const response = await DevicesApi.getAllDevices({
+        device_type: filters.device_type || undefined,
+        status: filters.status || undefined,
+        is_trusted: filters.is_trusted,
+      });
+      setDevices(response);
+    } catch (err: any) {
+      console.error("Error fetching devices:", err);
+      setError(err.message || "Failed to fetch devices");
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchDevices();
   }, [filters]);
 
@@ -253,7 +257,10 @@ const DevicesPage: React.FC = () => {
             </p>
           </div>
           <div className="mt-4 sm:mt-0">
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 flex items-center">
+            <button
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 flex items-center"
+              onClick={() => setIsNetworkScanModalOpen(true)}
+            >
               <svg
                 className="w-5 h-5 mr-2"
                 fill="none"
@@ -265,11 +272,18 @@ const DevicesPage: React.FC = () => {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth="2"
-                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                ></path>
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
               </svg>
-              Register New Device
+              Scan Network
             </button>
+
+            {/* Network scanning modal */}
+            <NetworkScanModal
+              isOpen={isNetworkScanModalOpen}
+              onClose={() => setIsNetworkScanModalOpen(false)}
+              onDeviceAdded={fetchDevices}
+            />
           </div>
         </div>
       </div>
@@ -435,10 +449,13 @@ const DevicesPage: React.FC = () => {
                 No devices found
               </h3>
               <p className="mt-1 text-sm text-gray-500">
-                Try adjusting your filters or register a new device.
+                Try adjusting your filters or scan for new devices.
               </p>
               <div className="mt-6">
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 flex items-center mx-auto">
+                <button
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 flex items-center mx-auto"
+                  onClick={() => setIsNetworkScanModalOpen(true)}
+                >
                   <svg
                     className="w-5 h-5 mr-2"
                     fill="none"
@@ -449,10 +466,10 @@ const DevicesPage: React.FC = () => {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth="2"
-                      d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                     />
                   </svg>
-                  Register New Device
+                  Scan Network
                 </button>
               </div>
             </div>

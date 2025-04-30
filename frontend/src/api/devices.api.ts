@@ -36,14 +36,6 @@ const DevicesApi = {
   },
 
   /**
-   * Зарегистрировать новое устройство
-   */
-  registerDevice: async (device: DeviceCreate): Promise<Device> => {
-    const response = await api.post<Device>("/devices/register", device);
-    return response.data;
-  },
-
-  /**
    * Обновить информацию об устройстве
    */
   updateDevice: async (
@@ -120,6 +112,27 @@ const DevicesApi = {
       // Return empty array in case of error
       return [];
     }
+  },
+
+  /**
+   * Scan the network to discover new devices
+   */
+  scanNetwork: async (): Promise<any[]> => {
+    try {
+      const response = await api.get<any[]>("/devices/scan-network");
+      return response.data;
+    } catch (error) {
+      console.error("Error scanning network:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Register a new device
+   */
+  registerDevice: async (deviceData: DeviceCreate): Promise<Device> => {
+    const response = await api.post<Device>("/devices/register", deviceData);
+    return response.data;
   },
 };
 

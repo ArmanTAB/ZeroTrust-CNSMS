@@ -1,10 +1,15 @@
 # backend/app/devices/routes.py
+import socket
+import subprocess
+import re
+import platform
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from typing import List, Annotated, Optional
 from datetime import datetime, timedelta
 from ..auth.routes import get_current_user
 from ..auth.models import User
-from .models import DeviceCreate, DeviceUpdate, Device, DeviceStatus
+from .models import DeviceCreate, DeviceUpdate, Device, DeviceStatus, DeviceType
 from .utils import (
     register_device, get_device_by_id, update_device, 
     set_device_status, calculate_device_risk_score, get_all_devices,
@@ -241,3 +246,130 @@ async def add_risk_history_record(
     result = await add_device_risk_history_record(device_id, risk_score, timestamp)
     
     return {"status": "success", "message": "Risk history record created", "record_id": result}
+
+@router.get("/scan-network", response_model=List[dict])
+async def scan_network(
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """Scan the network to discover devices"""
+    found_devices = []
+    
+    # Get local IP address
+    def get_my_ip():
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(('10.255.255.255', 1))
+            IP = s.getsockname()[0]
+        except Exception:
+            IP = '127.0.0.1'
+        finally:
+            s.close()
+        return IP
+
+    # Get IP range for scanning
+    def get_ip_range():
+        my_ip = get_my_ip()
+        # Extract first three octets
+        ip_parts = my_ip.split('.')
+        base_ip = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}"
+        return base_ip
+
+    # Get hostname by IP
+    def get_hostname(ip):
+        try:
+            return socket.gethostbyaddr(ip)[0]
+        except:
+            return "Unknown"
+
+    # Guess device type based on hostname
+    def guess_device_type(hostname):
+        hostname = hostname.lower()
+        if any(word in hostname for word in ['phone', 'iphone', 'android', 'mobile']):
+            return DeviceType.MOBILE
+        elif any(word in hostname for word in ['laptop', 'notebook']):
+            return DeviceType.LAPTOP
+        elif any(word in hostname for word in ['server', 'nas', 'cloud']):
+            return DeviceType.SERVER
+        elif any(word in hostname for word in ['router', 'gateway', 'ap', 'switch']):
+            return DeviceType.NETWORK
+        elif any(word in hostname for word in ['tv', 'roku', 'firestick', 'chromecast', 'camera']):
+            return DeviceType.IOT
+        return DeviceType.WORKSTATION  # Default
+
+    # Guess OS type based on hostname
+    def guess_os_type(hostname):
+        hostname = hostname.lower()
+        if any(word in hostname for word in ['win', 'windows', 'microsoft']):
+            return "Windows"
+        elif any(word in hostname for word in ['mac', 'apple', 'iphone', 'ipad']):
+            return "Apple"
+        elif any(word in hostname for word in ['android', 'pixel', 'galaxy']):
+            return "Android"
+        elif any(word in hostname for word in ['linux', 'ubuntu', 'debian']):
+            return "Linux"
+        return "Unknown OS"
+
+    # Perform scan asynchronously
+    async def scan():
+        base_ip = get_ip_range()
+        logger.info(f"Scanning network range: {base_ip}.0/24")
+        
+        # Use ARP scan via system command
+        try:
+            if platform.system() == 'Windows':
+                result = subprocess.run(['arp', '-a'], capture_output=True, text=True)
+            else:
+                result = subprocess.run(['arp', '-a'], capture_output=True, text=True)
+            output = result.stdout
+        except Exception as e:
+            logger.error(f"Error running ARP command: {e}")
+            return []
+        
+        # Parse ARP output
+        devices = []
+        ip_pattern = re.compile(rf"{re.escape(base_ip)}\.\d+")
+        
+        for line in output.splitlines():
+            if base_ip in line:
+                ip_match = ip_pattern.search(line)
+                if ip_match:
+                    ip = ip_match.group(0)
+                    
+                    # Extract MAC address
+                    mac_match = re.search(r'([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})', line)
+                    if not mac_match:
+                        continue
+                    
+                    mac = mac_match.group(0).replace('-', ':').lower()
+                    
+                    # Create device info
+                    hostname = get_hostname(ip)
+                    device_id = mac.replace(':', '')
+                    device_type = guess_device_type(hostname)
+                    
+                    # Check if device already exists in DB
+                    existing_device = await get_device_by_id(device_id)
+                    
+                    device_info = {
+                        "device_id": device_id,
+                        "ip_address": ip,
+                        "mac_address": mac,
+                        "hostname": hostname,
+                        "device_type": device_type,
+                        "os_type": guess_os_type(hostname),
+                        "is_trusted": False,  # Default to untrusted
+                        "system_info": {
+                            "detection_method": "network_scan",
+                            "scan_time": datetime.utcnow().isoformat()
+                        },
+                        "already_registered": existing_device is not None
+                    }
+                    devices.append(device_info)
+                    logger.info(f"Found device: {hostname} ({ip}) - {mac}")
+        
+        return devices
+    
+    # Execute scan
+    found_devices = await scan()
+    
+    return found_devices
