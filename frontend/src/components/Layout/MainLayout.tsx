@@ -283,6 +283,41 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 Access Logs
               </span>
             </Link>
+            <Link
+              to="/profile"
+              className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 group ${
+                isActiveRoute("/profile")
+                  ? "bg-blue-700 text-white"
+                  : "text-blue-100 hover:bg-blue-800 hover:text-white"
+              } ${isSidebarCollapsed && !isHovering ? "justify-center" : ""}`}
+            >
+              <svg
+                className={`flex-shrink-0 w-6 h-6 transition-colors duration-200 ${
+                  isActiveRoute("/profile")
+                    ? "text-white"
+                    : "text-blue-300 group-hover:text-white"
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                />
+              </svg>
+              <span
+                className={`text-sm font-medium transition-opacity duration-200 ml-3 ${
+                  isSidebarCollapsed && !isHovering
+                    ? "opacity-0 w-0 overflow-hidden"
+                    : "opacity-100"
+                }`}
+              >
+                Profile
+              </span>
+            </Link>
           </nav>
           <div
             className={`p-4 bg-blue-900 bg-opacity-40 transition-all duration-200 ${
@@ -570,6 +605,30 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                       />
                     </svg>
                     <span>Access Logs</span>
+                  </Link>
+                  <Link
+                    to="/profile"
+                    className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 ${
+                      isActiveRoute("/profile")
+                        ? "bg-blue-700 text-white"
+                        : "text-blue-100 hover:bg-blue-800 hover:text-white"
+                    }`}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <svg
+                      className="w-6 h-6 mr-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                      />
+                    </svg>
+                    <span>Profile</span>
                   </Link>
                 </nav>
                 <div className="mt-10 px-3">

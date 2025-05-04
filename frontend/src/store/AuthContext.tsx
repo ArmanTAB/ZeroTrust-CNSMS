@@ -15,6 +15,11 @@ interface AuthContextType {
   error: string | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWith2FA: (
+    email: string,
+    password: string,
+    totpToken: string
+  ) => Promise<void>;
   logout: () => void;
   clearError: () => void;
   verifyEmail: (
@@ -101,6 +106,31 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const loginWith2FA = async (
+    email: string,
+    password: string,
+    totpToken: string
+  ) => {
+    setLoading(true);
+    setError(null); // Clear previous errors
+
+    try {
+      const auth = await AuthApi.loginWith2FA(email, password, totpToken);
+      localStorage.setItem("token", auth.access_token);
+
+      // Get user information after successful login
+      const userData = await AuthApi.getProfile();
+      setUser(userData);
+    } catch (err: any) {
+      const errorMessage =
+        err.response?.data?.detail || err.message || "Authentication failed";
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem("token");
     setUser(null);
@@ -151,6 +181,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     error,
     isAuthenticated: !!user,
     login,
+    loginWith2FA,
     logout,
     clearError,
     verifyEmail,

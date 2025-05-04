@@ -221,3 +221,18 @@ export interface VulnerabilityUpdate {
   remediation_steps?: string;
   status?: VulnerabilityStatus;
 }
+
+export interface TOTPSetupResponse {
+  status: string;
+  message: string;
+  data: {
+    secret: string;
+    qr_code: string;
+    issuer: string;
+    account: string;
+  };
+}
+
+export interface TOTPStatusResponse {
+  totp_enabled: boolean;
+}

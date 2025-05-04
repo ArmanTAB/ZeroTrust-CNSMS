@@ -12,6 +12,7 @@ import DevicesPage from "./pages/Devices/DevicesPage";
 import DeviceDetailsPage from "./pages/Devices/DeviceDetailsPage";
 import AccessLogsPage from "./pages/AccessLogs/AccessLogsPage";
 import NotFoundPage from "./pages/NotFoundPage";
+import ProfilePage from "./pages/Profile/ProfilePage";
 
 const AppRoutes: React.FC = () => {
   return (
@@ -29,6 +30,7 @@ const AppRoutes: React.FC = () => {
         <Route path="/devices" element={<DevicesPage />} />
         <Route path="/devices/:deviceId" element={<DeviceDetailsPage />} />
         <Route path="/access-logs" element={<AccessLogsPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
       </Route>
 
       {/* Перенаправление с главной страницы */}

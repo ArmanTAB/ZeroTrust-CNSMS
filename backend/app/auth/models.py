@@ -33,6 +33,11 @@ class UserInDB(BaseModel):
     verification_sent_at: Optional[datetime] = None  # Track when verification was sent
     password_reset_code: Optional[str] = None  # Store password reset code
     password_reset_sent_at: Optional[datetime] = None  # Track when reset code was sent
+    totp_secret: Optional[str] = None
+    totp_enabled: bool = False
+    totp_verified: bool = False
+    totp_created_at: Optional[datetime] = None
+    totp_verified_at: Optional[datetime] = None
     
     model_config = {
         "populate_by_name": True
@@ -47,6 +52,7 @@ class User(BaseModel):
     last_login: Optional[datetime] = None
     is_active: bool = True
     is_verified: bool = False  # New field for email verification
+    totp_enabled: bool = False
 
 class Token(BaseModel):
     access_token: str
@@ -72,3 +78,8 @@ class ResetPasswordRequest(BaseModel):
     email: EmailStr
     code: str
     new_password: str
+    
+class LoginWithTOTP(BaseModel):
+    email: EmailStr
+    password: str
+    totp_token: Optional[str] = None

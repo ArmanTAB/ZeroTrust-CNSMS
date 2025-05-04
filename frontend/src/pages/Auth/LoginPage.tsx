@@ -3,6 +3,8 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../store/AuthContext";
 import { useToast } from "../../store/ToastContext";
+import AuthApi from "../../api/auth.api";
+import TOTPVerification from "../../components/Auth/TOTPVerification";
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -10,10 +12,16 @@ const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // New state variables for 2FA
+  const [is2FARequired, setIs2FARequired] = useState(false);
+  const [totpError, setTotpError] = useState<string | undefined>(undefined);
+
   const navigate = useNavigate();
   const location = useLocation();
   const {
     login,
+    loginWith2FA,
     isAuthenticated,
     user,
     error,
@@ -57,8 +65,18 @@ const LoginPage: React.FC = () => {
     setErrorMessage(null);
 
     try {
+      // First, check if 2FA is required
+      const checkResult = await AuthApi.check2FARequired(email, password);
+
+      if (checkResult.totp_required) {
+        // If 2FA is required, show the verification screen
+        setIs2FARequired(true);
+        setLoading(false);
+        return;
+      }
+
+      // If 2FA is not required, proceed with normal login
       await login(email, password);
-      // After successful login, redirect is handled by the useEffect above
       showToast("You have successfully logged in!", "success");
     } catch (err: any) {
       console.error("Login error:", err);
@@ -92,6 +110,32 @@ const LoginPage: React.FC = () => {
     }
   };
 
+  // Handler for 2FA verification
+  const handleTOTPVerification = async (code: string) => {
+    setLoading(true);
+    setTotpError(undefined);
+
+    try {
+      // Login with 2FA
+      await loginWith2FA(email, password, code);
+      showToast("You have successfully logged in!", "success");
+
+      // Navigation will be handled by the useEffect hook
+    } catch (err: any) {
+      console.error("2FA verification error:", err);
+      setTotpError(err.message || "Invalid verification code");
+      showToast(err.message || "Invalid verification code", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handler to go back to the login screen from 2FA
+  const handleCancelTOTP = () => {
+    setIs2FARequired(false);
+    setTotpError(undefined);
+  };
+
   // If we're still checking authentication status, show a loading indicator
   if (authLoading) {
     return (
@@ -114,6 +158,20 @@ const LoginPage: React.FC = () => {
             You are already logged in. Redirecting...
           </p>
         </div>
+      </div>
+    );
+  }
+
+  // Show 2FA verification screen if required
+  if (is2FARequired) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 py-12 px-4 sm:px-6 lg:px-8">
+        <TOTPVerification
+          onVerify={handleTOTPVerification}
+          onCancel={handleCancelTOTP}
+          isLoading={loading}
+          error={totpError}
+        />
       </div>
     );
   }

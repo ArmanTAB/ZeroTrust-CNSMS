@@ -10,6 +10,8 @@ import {
   VerificationStatus,
   PasswordResetRequest,
   PasswordResetVerifyRequest,
+  TOTPSetupResponse,
+  TOTPStatusResponse,
 } from "../types";
 
 const AuthApi = {
@@ -131,6 +133,76 @@ const AuthApi = {
       "/auth/reset-password",
       data
     );
+    return response.data;
+  },
+
+  /**
+   * Get TOTP setup details (QR code & secret)
+   */
+  setupTOTP: async (): Promise<TOTPSetupResponse> => {
+    const response = await api.post<TOTPSetupResponse>("/auth/totp/setup");
+    return response.data;
+  },
+
+  /**
+   * Verify TOTP token to complete setup
+   */
+  verifyTOTP: async (token: string): Promise<any> => {
+    const response = await api.post<any>("/auth/totp/verify", { token });
+    return response.data;
+  },
+
+  /**
+   * Disable TOTP for the current user
+   */
+  disableTOTP: async (): Promise<any> => {
+    const response = await api.post<any>("/auth/totp/disable");
+    return response.data;
+  },
+
+  /**
+   * Get TOTP status
+   */
+  getTOTPStatus: async (): Promise<TOTPStatusResponse> => {
+    const response = await api.get<TOTPStatusResponse>("/auth/totp/status");
+    return response.data;
+  },
+
+  /**
+   * Check if 2FA is required for login
+   */
+  check2FARequired: async (email: string, password: string): Promise<any> => {
+    const response = await api.post<any>("/auth/login/2fa-check", {
+      email,
+      password,
+    });
+    return response.data;
+  },
+
+  /**
+   * Login with 2FA
+   */
+  loginWith2FA: async (
+    email: string,
+    password: string,
+    totpToken: string
+  ): Promise<AuthResponse> => {
+    // Create formData to maintain compatibility with backend
+    const formData = new URLSearchParams();
+    formData.append("username", email);
+    formData.append("password", password);
+    formData.append("scope", `totp:${totpToken}`); // Use scope to send the token
+
+    const response = await api.post<AuthResponse>(
+      "/auth/token",
+      formData.toString(),
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
+    );
+
     return response.data;
   },
 };

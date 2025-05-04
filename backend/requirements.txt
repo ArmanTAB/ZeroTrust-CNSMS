@@ -13,3 +13,6 @@ jinja2
 secure-smtplib
 scapy
 python-nmap
+pyotp
+qrcode
+pillow
