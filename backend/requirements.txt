@@ -12,3 +12,4 @@ motor
 jinja2  
 secure-smtplib
 scapy
+python-nmap

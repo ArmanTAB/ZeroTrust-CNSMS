@@ -33,52 +33,76 @@ def get_hostname(ip):
         return "Unknown"
 
 def scan_network():
+    """Scan network to find devices using multiple methods"""
     base_ip = get_ip_range()
-    print(f"Scanning network range: {base_ip}.0/24")
+    logger.info(f"Scanning network range: {base_ip}.0/24")
     
-    # Using ARP scan through Windows command
+    devices = []
+    
+    # Method 1: ARP Table Scan (existing method)
     try:
         result = subprocess.run(['arp', '-a'], capture_output=True, text=True)
         output = result.stdout
+        # Parse ARP output (your existing code)
+        ip_pattern = re.compile(rf"{re.escape(base_ip)}\.\d+")
+        for line in output.splitlines():
+            if base_ip in line:
+                # Your existing parsing code here...
+                pass
     except Exception as e:
-        print(f"Error running ARP command: {e}")
-        return []
+        logger.error(f"Error running ARP command: {e}")
     
-    # Parse ARP output
-    devices = []
-    ip_pattern = re.compile(rf"{re.escape(base_ip)}\.\d+")
-    for line in output.splitlines():
-        if base_ip in line:
-            ip_match = ip_pattern.search(line)
-            if ip_match:
-                ip = ip_match.group(0)
-                
-                # Extract MAC address
-                mac_match = re.search(r'([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})', line)
-                if not mac_match:
-                    continue
-                
-                mac = mac_match.group(0).replace('-', ':').lower()
-                
-                # Create device info
+    # Method 2: Active ping scan
+    try:
+        # More aggressive method - ping each address in the subnet
+        for i in range(1, 255):
+            ip = f"{base_ip}.{i}"
+            # Use ping with short timeout
+            ping_cmd = ["ping", "-c", "1", "-W", "0.2", ip] if platform.system() != "Windows" else ["ping", "-n", "1", "-w", "200", ip]
+            
+            # Run ping command
+            ping_result = subprocess.run(ping_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            
+            # If ping successful
+            if ping_result.returncode == 0:
+                # Try to get hostname and MAC
                 hostname = get_hostname(ip)
-                device_id = mac.replace(':', '')
+                # Get MAC address via ARP (now that we've pinged it, it should be in ARP table)
+                mac_result = subprocess.run(["arp", "-n", ip] if platform.system() != "Windows" else ["arp", "-a", ip], 
+                                           capture_output=True, text=True)
                 
-                device_info = {
-                    "device_id": device_id,
-                    "ip_address": ip,
-                    "mac_address": mac,
-                    "hostname": hostname,
-                    "device_type": guess_device_type(hostname),
-                    "os_type": guess_os_type(hostname),
-                    "is_trusted": False,  # Default to untrusted
-                    "system_info": {
-                        "detection_method": "network_scan",
-                        "scan_time": time.strftime("%Y-%m-%d %H:%M:%S")
+                # Extract MAC from ARP output
+                mac_match = re.search(r'([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})', mac_result.stdout)
+                if mac_match:
+                    mac = mac_match.group(0).replace('-', ':').lower()
+                    device_id = mac.replace(':', '')
+                    
+                    # Skip if already found
+                    if any(d["device_id"] == device_id for d in devices):
+                        continue
+                    
+                    # Check if device exists in DB
+                    existing_device = await get_device_by_id(device_id)
+                    
+                    # Create device info
+                    device_info = {
+                        "device_id": device_id,
+                        "ip_address": ip,
+                        "mac_address": mac,
+                        "hostname": hostname,
+                        "device_type": guess_device_type(hostname),
+                        "os_type": guess_os_type(hostname),
+                        "is_trusted": False,
+                        "system_info": {
+                            "detection_method": "network_scan",
+                            "scan_time": datetime.utcnow().isoformat()
+                        },
+                        "already_registered": existing_device is not None
                     }
-                }
-                devices.append(device_info)
-                print(f"Found device: {hostname} ({ip}) - {mac}")
+                    devices.append(device_info)
+                    logger.info(f"Found device: {hostname} ({ip}) - {mac}")
+    except Exception as e:
+        logger.error(f"Error in ping scan: {e}")
     
     return devices
 

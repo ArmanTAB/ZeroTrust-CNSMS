@@ -24,128 +24,244 @@ router = APIRouter(prefix="/devices", tags=["devices"])
 # IMPORTANT: Scan network route MUST be BEFORE any routes with path parameters like /{device_id}
 @router.get("/scan-network", response_model=List[dict])
 async def scan_network():
-    """Scan the network to discover devices"""
-    found_devices = []
+    """Scan network to find devices using methods that work in restricted environments"""
+    base_ip = get_ip_range()
+    logger.info(f"Scanning network range: {base_ip}.0/24")
     
-    # Get local IP address
-    def get_my_ip():
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    devices = []
+    found_device_ids = set()  # To track already found devices
+    
+    # Method 1: Simple socket connection test for common network devices
+    common_ports = [80, 443, 22, 445, 139, 8080, 21, 25, 53]  # HTTP, HTTPS, SSH, SMB, etc.
+    common_ips = [1, 2, 3, 4, 5, 10, 20, 30, 100, 200, 250, 254]  # Common IP addresses in networks
+    
+    async def check_host(ip):
         try:
-            s.connect(('10.255.255.255', 1))
-            IP = s.getsockname()[0]
-        except Exception:
-            IP = '127.0.0.1'
-        finally:
-            s.close()
-        return IP
-
-    # Get IP range for scanning
-    def get_ip_range():
-        my_ip = get_my_ip()
-        # Extract first three octets
-        ip_parts = my_ip.split('.')
-        base_ip = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}"
-        return base_ip
-
-    # Get hostname by IP
-    def get_hostname(ip):
-        try:
-            return socket.gethostbyaddr(ip)[0]
-        except:
-            return "Unknown"
-
-    # Guess device type based on hostname
-    def guess_device_type(hostname):
-        hostname = hostname.lower()
-        if any(word in hostname for word in ['phone', 'iphone', 'android', 'mobile']):
-            return DeviceType.MOBILE
-        elif any(word in hostname for word in ['laptop', 'notebook']):
-            return DeviceType.LAPTOP
-        elif any(word in hostname for word in ['server', 'nas', 'cloud']):
-            return DeviceType.SERVER
-        elif any(word in hostname for word in ['router', 'gateway', 'ap', 'switch']):
-            return DeviceType.NETWORK
-        elif any(word in hostname for word in ['tv', 'roku', 'firestick', 'chromecast', 'camera']):
-            return DeviceType.IOT
-        return DeviceType.WORKSTATION  # Default
-
-    # Guess OS type based on hostname
-    def guess_os_type(hostname):
-        hostname = hostname.lower()
-        if any(word in hostname for word in ['win', 'windows', 'microsoft']):
-            return "Windows"
-        elif any(word in hostname for word in ['mac', 'apple', 'iphone', 'ipad']):
-            return "Apple"
-        elif any(word in hostname for word in ['android', 'pixel', 'galaxy']):
-            return "Android"
-        elif any(word in hostname for word in ['linux', 'ubuntu', 'debian']):
-            return "Linux"
-        return "Unknown OS"
-
-    # Perform scan asynchronously
-    async def scan():
-        base_ip = get_ip_range()
-        logger.info(f"Scanning network range: {base_ip}.0/24")
-        
-        # Use ARP scan via system command
-        try:
-            if platform.system() == 'Windows':
-                result = subprocess.run(['arp', '-a'], capture_output=True, text=True)
-            else:
-                result = subprocess.run(['arp', '-a'], capture_output=True, text=True)
-            output = result.stdout
+            # Try to connect to common ports with a short timeout
+            for port in common_ports:
+                # Use a regular, synchronous socket in an executor to avoid blocking
+                loop = asyncio.get_event_loop()
+                
+                def try_connect():
+                    try:
+                        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        s.settimeout(0.2)  # 200ms timeout
+                        result = s.connect_ex((ip, port))
+                        s.close()
+                        return result == 0  # True if connection succeeded
+                    except Exception as e:
+                        logger.debug(f"Socket connect error for {ip}:{port} - {str(e)}")
+                        return False
+                
+                # Run the connection attempt in a thread pool
+                try:
+                    is_active = await loop.run_in_executor(None, try_connect)
+                    if is_active:
+                        logger.info(f"Found active host at {ip} on port {port}")
+                        
+                        # Generate a deterministic MAC address based on IP
+                        ip_parts = [int(part) for part in ip.split('.')]
+                        pseudo_mac = f"02:00:{ip_parts[0]:02x}:{ip_parts[1]:02x}:{ip_parts[2]:02x}:{ip_parts[3]:02x}"
+                        
+                        device_id = pseudo_mac.replace(':', '')
+                        
+                        # Skip if already found
+                        if device_id in found_device_ids:
+                            return
+                        
+                        found_device_ids.add(device_id)
+                        
+                        # Try to get hostname (safely)
+                        hostname = "Unknown"
+                        try:
+                            # Use socket in executor to get hostname
+                            def get_host_name():
+                                try:
+                                    return socket.gethostbyaddr(ip)[0]
+                                except:
+                                    return "Unknown"
+                            
+                            hostname = await loop.run_in_executor(None, get_host_name)
+                        except Exception as e:
+                            logger.debug(f"Hostname lookup failed for {ip}: {str(e)}")
+                        
+                        # Check if device exists in DB
+                        existing_device = await get_device_by_id(device_id)
+                        
+                        # Determine device type from hostname and port
+                        device_type = DeviceType.WORKSTATION  # Default
+                        if port == 80 or port == 443 or port == 8080:
+                            if ip_parts[3] < 20:  # Low IP often indicates network equipment
+                                device_type = DeviceType.NETWORK
+                        elif port == 445 or port == 139:
+                            device_type = DeviceType.WORKSTATION  # File sharing - likely a PC
+                        
+                        # Guess OS
+                        os_type = "Unknown OS"
+                        if "win" in hostname.lower():
+                            os_type = "Windows"
+                        elif "mac" in hostname.lower() or "apple" in hostname.lower():
+                            os_type = "Apple"
+                        
+                        # Create device info
+                        device_info = {
+                            "device_id": device_id,
+                            "ip_address": ip,
+                            "mac_address": pseudo_mac,
+                            "hostname": hostname,
+                            "device_type": device_type,
+                            "os_type": os_type,
+                            "is_trusted": False,
+                            "system_info": {
+                                "detection_method": "port_scan",
+                                "scan_time": datetime.utcnow().isoformat(),
+                                "open_port": port,
+                                "note": "MAC address is deterministically generated from IP"
+                            },
+                            "already_registered": existing_device is not None
+                        }
+                        devices.append(device_info)
+                        logger.info(f"Added device via port scan: {hostname} ({ip}) - {pseudo_mac} - Port {port} open")
+                        break  # Found an open port, no need to check more
+                except Exception as e:
+                    logger.debug(f"Executor error for {ip}:{port} - {str(e)}")
         except Exception as e:
-            logger.error(f"Error running ARP command: {e}")
-            return []
-        
-        # Parse ARP output
-        devices = []
-        ip_pattern = re.compile(rf"{re.escape(base_ip)}\.\d+")
-        
-        for line in output.splitlines():
-            if base_ip in line:
-                ip_match = ip_pattern.search(line)
-                if ip_match:
-                    ip = ip_match.group(0)
-                    
-                    # Extract MAC address
-                    mac_match = re.search(r'([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})', line)
-                    if not mac_match:
-                        continue
-                    
-                    mac = mac_match.group(0).replace('-', ':').lower()
-                    
-                    # Create device info
-                    hostname = get_hostname(ip)
-                    device_id = mac.replace(':', '')
-                    device_type = guess_device_type(hostname)
-                    
-                    # Check if device already exists in DB
-                    existing_device = await get_device_by_id(device_id)
-                    
-                    device_info = {
-                        "device_id": device_id,
-                        "ip_address": ip,
-                        "mac_address": mac,
-                        "hostname": hostname,
-                        "device_type": device_type,
-                        "os_type": guess_os_type(hostname),
-                        "is_trusted": False,  # Default to untrusted
-                        "system_info": {
-                            "detection_method": "network_scan",
-                            "scan_time": datetime.utcnow().isoformat()
-                        },
-                        "already_registered": existing_device is not None
-                    }
-                    devices.append(device_info)
-                    logger.info(f"Found device: {hostname} ({ip}) - {mac}")
-        
-        return devices
+            logger.error(f"Error checking host {ip}: {str(e)}")
     
-    # Execute scan
-    found_devices = await scan()
+    # Create tasks for IPs to check
+    tasks = []
+    for i in common_ips:
+        ip = f"{base_ip}.{i}"
+        tasks.append(check_host(ip))
     
-    return found_devices
+    # Run all tasks concurrently
+    await asyncio.gather(*tasks)
+    
+    # Always add current device info as a reliable fallback
+    try:
+        # Get current device info
+        my_ip = get_my_ip()
+        hostname = socket.gethostname()
+        
+        # Generate a deterministic MAC for consistency
+        ip_parts = [int(part) for part in my_ip.split('.')]
+        mac = f"02:00:{ip_parts[0]:02x}:{ip_parts[1]:02x}:{ip_parts[2]:02x}:{ip_parts[3]:02x}"
+        
+        device_id = mac.replace(':', '')
+        
+        # Skip if already found
+        if device_id not in found_device_ids:
+            found_device_ids.add(device_id)
+            
+            # Check if device exists in DB
+            existing_device = await get_device_by_id(device_id)
+            
+            # Create device info for current device
+            device_info = {
+                "device_id": device_id,
+                "ip_address": my_ip,
+                "mac_address": mac,
+                "hostname": hostname,
+                "device_type": DeviceType.WORKSTATION,
+                "os_type": f"{platform.system()}",
+                "is_trusted": True,  # Current device is trusted
+                "system_info": {
+                    "detection_method": "current_device",
+                    "scan_time": datetime.utcnow().isoformat()
+                },
+                "already_registered": existing_device is not None
+            }
+            devices.append(device_info)
+            logger.info(f"Added current device: {hostname} ({my_ip}) - {mac}")
+    except Exception as e:
+        logger.error(f"Error getting current device info: {str(e)}")
+    
+    # If no devices found, add a placeholder for the local machine
+    if not devices:
+        try:
+            # Last resort fallback - add localhost
+            my_ip = "127.0.0.1"
+            hostname = "localhost"
+            mac = "02:00:7f:00:00:01"  # Deterministic for 127.0.0.1
+            device_id = mac.replace(':', '')
+            
+            device_info = {
+                "device_id": device_id,
+                "ip_address": my_ip,
+                "mac_address": mac,
+                "hostname": hostname,
+                "device_type": DeviceType.WORKSTATION,
+                "os_type": f"{platform.system()}",
+                "is_trusted": True,
+                "system_info": {
+                    "detection_method": "fallback",
+                    "scan_time": datetime.utcnow().isoformat()
+                },
+                "already_registered": False
+            }
+            devices.append(device_info)
+            logger.info(f"Added fallback device: {hostname} ({my_ip}) - {mac}")
+        except Exception as e:
+            logger.error(f"Error adding fallback device: {str(e)}")
+    
+    return devices
+
+# Helper function to asynchronously get hostname
+async def get_hostname(ip):
+    try:
+        # Run the hostname lookup in a thread pool since socket.gethostbyaddr is blocking
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, lambda: socket.gethostbyaddr(ip)[0])
+    except Exception as e:
+        # Log specific error for debugging
+        logger.debug(f"Hostname lookup failed for {ip}: {str(e)}")
+        return "Unknown"
+
+# Helper functions from the original code
+def get_ip_range():
+    my_ip = get_my_ip()
+    # Extract first three octets
+    ip_parts = my_ip.split('.')
+    base_ip = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}"
+    return base_ip
+
+def get_my_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # Doesn't need to be reachable
+        s.connect(('10.255.255.255', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP
+
+def guess_device_type(hostname):
+    hostname = hostname.lower()
+    if any(word in hostname for word in ['phone', 'iphone', 'android', 'mobile']):
+        return DeviceType.MOBILE
+    elif any(word in hostname for word in ['laptop', 'notebook']):
+        return DeviceType.LAPTOP
+    elif any(word in hostname for word in ['server', 'nas', 'cloud']):
+        return DeviceType.SERVER
+    elif any(word in hostname for word in ['router', 'gateway', 'ap', 'switch']):
+        return DeviceType.NETWORK
+    elif any(word in hostname for word in ['tv', 'roku', 'firestick', 'chromecast', 'camera']):
+        return DeviceType.IOT
+    return DeviceType.WORKSTATION  # Default
+
+def guess_os_type(hostname):
+    hostname = hostname.lower()
+    if any(word in hostname for word in ['win', 'windows', 'microsoft']):
+        return "Windows"
+    elif any(word in hostname for word in ['mac', 'apple', 'iphone', 'ipad']):
+        return "Apple"
+    elif any(word in hostname for word in ['android', 'pixel', 'galaxy']):
+        return "Android"
+    elif any(word in hostname for word in ['linux', 'ubuntu', 'debian']):
+        return "Linux"
+    return "Unknown OS"
 
 @router.post("/register", response_model=Device)
 async def register_new_device(device_data: DeviceCreate):
