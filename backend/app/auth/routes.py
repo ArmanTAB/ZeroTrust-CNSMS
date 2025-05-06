@@ -315,24 +315,45 @@ async def verify_totp_token(
 @router.post("/totp/disable", response_model=dict)
 async def disable_totp_auth(current_user: Annotated[User, Depends(get_current_user)]):
     """Disable TOTP for a user"""
-    if not current_user.totp_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="2FA is not enabled for this user"
-        )
+    logger.info(f"Disable TOTP request for user ID: {current_user.id}")
     
-    success = await disable_totp(current_user.id)
-    if not success:
+    try:
+        # Check if 2FA is enabled for the user
+        is_enabled = await is_totp_enabled(current_user.id)
+        
+        if not is_enabled:
+            logger.warning(f"2FA is not enabled for user {current_user.id}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="2FA is not enabled for this user"
+            )
+        
+        # Attempt to disable 2FA
+        success = await disable_totp(current_user.id)
+        
+        if not success:
+            logger.error(f"Failed to disable TOTP for user {current_user.id}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to disable TOTP"
+            )
+        
+        logger.info(f"Successfully disabled TOTP for user {current_user.id}")
+        
+        return {
+            "status": "success",
+            "message": "TOTP disabled",
+            "totp_enabled": False
+        }
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error disabling TOTP: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to disable TOTP"
+            detail=f"Failed to disable TOTP: {str(e)}"
         )
-    
-    return {
-        "status": "success",
-        "message": "TOTP disabled",
-        "totp_enabled": False
-    }
 
 @router.get("/totp/status", response_model=dict)
 async def get_totp_status(current_user: Annotated[User, Depends(get_current_user)]):

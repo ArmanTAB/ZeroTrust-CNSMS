@@ -137,19 +137,46 @@ async def verify_totp(user_id: str, token: str) -> bool:
 
 async def disable_totp(user_id: str) -> bool:
     """Disable TOTP for a user"""
-    result = await db.db.users.update_one(
-        {"_id": user_id},
-        {"$set": {
-            "totp_enabled": False,
-        }}
-    )
-    
-    return result.modified_count > 0
+    try:
+        # Convert string ID to ObjectId
+        user_id_obj = ObjectId(user_id)
+        logger.info(f"Disabling TOTP for user ID: {user_id_obj}")
+        
+        result = await db.db.users.update_one(
+            {"_id": user_id_obj},
+            {"$set": {
+                "totp_enabled": False,
+            }}
+        )
+        
+        success = result.modified_count > 0
+        logger.info(f"TOTP disable result: {success}, modified count: {result.modified_count}")
+        return success
+    except Exception as e:
+        logger.error(f"Error in disable_totp: {str(e)}", exc_info=True)
+        return False
 
 async def is_totp_enabled(user_id: str) -> bool:
     """Check if TOTP is enabled for a user"""
-    user = await db.db.users.find_one({"_id": user_id})
-    if not user:
-        return False
+    logger.info(f"Checking if TOTP is enabled for user ID: {user_id}")
     
-    return user.get("totp_enabled", False)
+    try:
+        # Convert string ID to ObjectId
+        user_id_obj = ObjectId(user_id)
+        logger.info(f"Converted to ObjectId: {user_id_obj}")
+        
+        # Get user from database
+        user = await db.db.users.find_one({"_id": user_id_obj})
+        
+        if not user:
+            logger.error(f"User not found with ID: {user_id_obj}")
+            return False
+        
+        # Log the totp_enabled value for debugging
+        totp_enabled = user.get("totp_enabled", False)
+        logger.info(f"TOTP enabled value from database: {totp_enabled}")
+        
+        return totp_enabled
+    except Exception as e:
+        logger.error(f"Error in is_totp_enabled: {str(e)}", exc_info=True)
+        return False
