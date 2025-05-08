@@ -5,6 +5,7 @@ import {
   AccessLogCreate,
   AccessDecision,
   AccessStatistics,
+  AccessType,
 } from "../types";
 
 const AccessApi = {
@@ -112,6 +113,38 @@ const AccessApi = {
         },
       ];
     }
+  },
+
+  /**
+   * Get available Google Drive folders
+   */
+  getGoogleDriveFolders: async (): Promise<any[]> => {
+    const response = await api.get<any[]>("/google-drive/folders");
+    return response.data;
+  },
+
+  /**
+   * Request access to a Google Drive folder
+   */
+  requestGoogleDriveAccess: async (
+    folderId: string
+  ): Promise<AccessDecision> => {
+    // Get current device ID from local storage or generate a new one
+    const deviceId = localStorage.getItem("device_id") || "unknown-device";
+
+    const accessData = {
+      device_id: deviceId,
+      ip_address: "", // Will be determined by backend
+      user_agent: navigator.userAgent,
+      resource: `google-drive:folder:${folderId}`,
+      access_type: AccessType.READ,
+    };
+
+    const response = await api.post<AccessDecision>(
+      "/access/google-drive",
+      accessData
+    );
+    return response.data;
   },
 };
 

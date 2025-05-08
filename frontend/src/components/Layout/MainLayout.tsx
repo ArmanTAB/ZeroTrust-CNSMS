@@ -318,6 +318,41 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 Profile
               </span>
             </Link>
+            <Link
+              to="/google-drive"
+              className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 group ${
+                isActiveRoute("/google-drive")
+                  ? "bg-blue-700 text-white"
+                  : "text-blue-100 hover:bg-blue-800 hover:text-white"
+              } ${isSidebarCollapsed && !isHovering ? "justify-center" : ""}`}
+            >
+              <svg
+                className={`flex-shrink-0 w-6 h-6 transition-colors duration-200 ${
+                  isActiveRoute("/google-drive")
+                    ? "text-white"
+                    : "text-blue-300 group-hover:text-white"
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+                />
+              </svg>
+              <span
+                className={`text-sm font-medium transition-opacity duration-200 ml-3 ${
+                  isSidebarCollapsed && !isHovering
+                    ? "opacity-0 w-0 overflow-hidden"
+                    : "opacity-100"
+                }`}
+              >
+                Google Drive
+              </span>
+            </Link>
           </nav>
           <div
             className={`p-4 bg-blue-900 bg-opacity-40 transition-all duration-200 ${

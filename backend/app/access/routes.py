@@ -166,3 +166,71 @@ async def get_security_alerts(
     
     alerts = await get_recent_alerts(limit, resolved)
     return alerts
+
+@router.post("/google-drive", response_model=AccessDecision)
+async def request_google_drive_access(
+    access_data: AccessLogCreate,
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """
+    Request access to Google Drive folder.
+    This evaluates the request based on Zero Trust principles and 
+    grants/denies access based on device trust level and user permissions.
+    """
+    # Set timestamp if not provided
+    if not access_data.timestamp:
+        access_data.timestamp = datetime.utcnow()
+    
+    # Extract folder ID from resource
+    # Assuming resource is in format "google-drive:folder:{folder_id}"
+    parts = access_data.resource.split(":")
+    if len(parts) != 3 or parts[0] != "google-drive" or parts[1] != "folder":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid resource format for Google Drive access"
+        )
+    
+    folder_id = parts[2]
+    
+    # Evaluate request using Zero Trust principles
+    decision = await evaluate_access_request(access_data)
+    
+    # If access is granted, you would actually grant access in Google Drive
+    # We'll skip the actual Google Drive integration for now
+    if decision.access_granted:
+        # Add to decision context
+        decision.context["folder_id"] = folder_id
+        
+        # For now, we'll just log that access was granted
+        logger.info(f"Access granted to Google Drive folder {folder_id} for user {current_user.email}")
+    
+    # Log the access attempt
+    log = await log_access_attempt(access_data, decision)
+    
+    return decision
+
+@router.get("/google-drive/folders", response_model=List[dict])
+async def list_google_drive_folders(
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """List available Google Drive folders for the current user"""
+    try:
+        # For now, just get the folder mappings from the database
+        # Later we'll integrate with the actual Google Drive API
+        cursor = db.db.folder_mappings.find({})
+        folders = []
+        
+        async for folder in cursor:
+            folders.append({
+                "id": folder["folder_id"],
+                "name": folder["name"],
+                "sensitivity": folder["sensitivity"]
+            })
+        
+        return folders
+    except Exception as e:
+        logger.error(f"Error listing Google Drive folders: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error listing Google Drive folders: {str(e)}"
+        )

@@ -59,6 +59,17 @@ async def evaluate_access_request(access_data: AccessLogCreate) -> AccessDecisio
     
     return decision
 
+async def get_folder_sensitivity(folder_id: str) -> str:
+    """Get the sensitivity level for a Google Drive folder from the database"""
+    # Look up in the folder_mappings collection
+    mapping = await db.db.folder_mappings.find_one({"folder_id": folder_id})
+    
+    if mapping:
+        return mapping.get("sensitivity", "confidential")
+    
+    # Default to confidential if not found
+    return "confidential"
+
 def determine_resource_sensitivity(resource: str) -> str:
     """Determine the sensitivity level of a resource"""
     # These would be more sophisticated in a real system
@@ -70,8 +81,24 @@ def determine_resource_sensitivity(resource: str) -> str:
         return "admin"
     elif resource.startswith("/api/hr"):
         return "confidential"
+    
+    # Add support for Google Drive folders
+    elif resource.startswith("google-drive:folder:"):
+        folder_id = resource.split(":")[-1]
+        # Here you could look up the folder sensitivity in a configuration
+        # For example, HR folders might be "confidential"
+        folder_mappings = {
+            "hr_folder_id": "confidential",
+            "finance_folder_id": "critical", 
+            "it_folder_id": "admin",
+            "general_folder_id": "internal"
+        }
+        
+        # Default to confidential for unmapped folders
+        return folder_mappings.get(folder_id, "confidential")
+    
     else:
-        return "internal"
+        return "internal"  # Default sensitivity level
 
 def is_access_type_allowed(access_type: str, resource_sensitivity: str) -> bool:
     """Check if the access type is allowed for the resource sensitivity"""
