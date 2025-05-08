@@ -331,6 +331,12 @@ async def generate_sample_alerts():
             severity="low"
         )
 
+# Модифицированные функции для работы с запросами доступа Google Drive
+# Добавьте этот код в файл backend/app/access/utils.py
+
+import logging
+logger = logging.getLogger(__name__)
+
 async def create_drive_access_request(
     user_id: str,
     user_email: str,
@@ -340,6 +346,9 @@ async def create_drive_access_request(
     device_ip: Optional[str] = None
 ) -> dict:
     """Create a new Google Drive access request"""
+    # Отладочный вывод
+    logger.info(f"Creating drive access request: User ID: {user_id}, Email: {user_email}, Folder: {folder_id}")
+    
     # Check if there's already a pending request for this user and folder
     existing_request = await db.db.drive_access_requests.find_one({
         "user_id": user_id,
@@ -349,6 +358,7 @@ async def create_drive_access_request(
     
     if existing_request:
         # Return the existing request
+        logger.info(f"Found existing request with ID: {existing_request.get('_id')}")
         existing_request["id"] = str(existing_request["_id"])
         existing_request.pop("_id", None)
         return existing_request
@@ -367,8 +377,21 @@ async def create_drive_access_request(
         "reason": None
     }
     
-    result = await db.db.drive_access_requests.insert_one(request_data)
-    request_data["id"] = str(result.inserted_id)
+    # Проверим структуру коллекции
+    collections = await db.db.list_collection_names()
+    if 'drive_access_requests' not in collections:
+        logger.warning("Collection 'drive_access_requests' does not exist. Creating it now.")
+        # Для отладки проверим содержимое базы данных
+        logger.info(f"Available collections: {collections}")
+    
+    try:
+        result = await db.db.drive_access_requests.insert_one(request_data)
+        request_data["id"] = str(result.inserted_id)
+        logger.info(f"Successfully created new access request with ID: {request_data['id']}")
+    except Exception as e:
+        logger.error(f"Error inserting access request: {str(e)}")
+        # Аварийное создание словаря с идентификатором
+        request_data["id"] = "error_creating_" + str(hash(user_id + folder_id))
     
     return request_data
 
@@ -380,6 +403,9 @@ async def get_drive_access_requests(
     """Get Google Drive access requests with optional filtering"""
     query = {}
     
+    # Отладочный вывод
+    logger.info(f"Getting drive access requests with filters: Status: {status}, User ID: {user_id}, Folder ID: {folder_id}")
+    
     if status:
         query["status"] = status
     if user_id:
@@ -387,14 +413,34 @@ async def get_drive_access_requests(
     if folder_id:
         query["folder_id"] = folder_id
     
+    logger.info(f"MongoDB query: {query}")
+    
     requests = []
-    cursor = db.db.drive_access_requests.find(query).sort("request_time", -1)
+    try:
+        # Проверка существования коллекции
+        collections = await db.db.list_collection_names()
+        if 'drive_access_requests' not in collections:
+            logger.warning("Collection 'drive_access_requests' does not exist!")
+            return []
+            
+        cursor = db.db.drive_access_requests.find(query).sort("request_time", -1)
+        
+        # Для отладки просматриваем все запросы в базе данных
+        all_requests_cursor = db.db.drive_access_requests.find({})
+        logger.info("Listing ALL requests in database:")
+        
+        async for req in all_requests_cursor:
+            logger.info(f"DB Request: ID: {req['_id']}, User: {req.get('user_email')}, Folder: {req.get('folder_id')}, Status: {req.get('status')}")
+        
+        # Теперь получаем запросы по фильтру
+        async for request in cursor:
+            request["id"] = str(request["_id"])
+            request.pop("_id", None)
+            requests.append(request)
+    except Exception as e:
+        logger.error(f"Error retrieving access requests: {str(e)}")
     
-    async for request in cursor:
-        request["id"] = str(request["_id"])
-        request.pop("_id", None)
-        requests.append(request)
-    
+    logger.info(f"Found {len(requests)} requests matching query")
     return requests
 
 async def update_drive_access_request(

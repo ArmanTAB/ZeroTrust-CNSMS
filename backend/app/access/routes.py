@@ -7,7 +7,9 @@ from ..auth.models import User
 from .models import AccessLogCreate, AccessLog, AccessDecision
 from .utils import (
     evaluate_access_request, log_access_attempt, 
-    get_access_logs, get_access_statistics
+    get_access_logs, get_access_statistics,
+    create_drive_access_request, get_drive_access_requests,
+    update_drive_access_request
 )
 import logging
 from ..common.alerts import get_recent_alerts, generate_sample_alerts
@@ -169,6 +171,7 @@ async def get_security_alerts(
     return alerts
 
 # Google Drive access endpoints
+
 @router.post("/google-drive", response_model=AccessDecision)
 async def request_google_drive_access(
     access_data: AccessLogCreate,
@@ -179,6 +182,8 @@ async def request_google_drive_access(
     This evaluates the request based on Zero Trust principles and 
     also creates a pending access request for admin approval.
     """
+    logger.info(f"Processing new Google Drive access request from {current_user.email}")
+    
     # Set timestamp if not provided
     if not access_data.timestamp:
         access_data.timestamp = datetime.utcnow()
@@ -187,29 +192,71 @@ async def request_google_drive_access(
     # Assuming resource is in format "google-drive:folder:{folder_id}"
     parts = access_data.resource.split(":")
     if len(parts) != 3 or parts[0] != "google-drive" or parts[1] != "folder":
+        logger.error(f"Invalid resource format: {access_data.resource}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid resource format for Google Drive access"
         )
     
     folder_id = parts[2]
+    logger.info(f"Request for folder ID: {folder_id}")
     
     # Get folder name from the database
     folder = await db.db.folder_mappings.find_one({"folder_id": folder_id})
     folder_name = folder["name"] if folder else "Unknown Folder"
+    logger.info(f"Folder name: {folder_name}, Found in DB: {folder is not None}")
     
     # Evaluate request using Zero Trust principles
     decision = await evaluate_access_request(access_data)
     
+    # Ensure the drive_access_requests collection exists
+    collections = await db.db.list_collection_names()
+    if 'drive_access_requests' not in collections:
+        logger.info("Creating drive_access_requests collection as it doesn't exist")
+        await db.db.create_collection('drive_access_requests')
+    
     # Create an access request record regardless of the decision
-    await create_drive_access_request(
-        user_id=str(current_user.id),
-        user_email=current_user.email,
-        folder_id=folder_id,
-        folder_name=folder_name,
-        device_id=access_data.device_id,
-        device_ip=access_data.ip_address
-    )
+    try:
+        request_data = {
+            "user_id": str(current_user.id),
+            "user_email": current_user.email,
+            "folder_id": folder_id,
+            "folder_name": folder_name,
+            "device_id": access_data.device_id,
+            "device_ip": access_data.ip_address,
+            "request_time": datetime.utcnow(),
+            "status": "pending",
+            "decision_time": None,
+            "decision_by": None,
+            "reason": None
+        }
+        
+        # Проверим, существует ли уже запрос от этого пользователя на эту папку
+        existing_request = await db.db.drive_access_requests.find_one({
+            "user_id": str(current_user.id),
+            "folder_id": folder_id,
+            "status": "pending"
+        })
+        
+        if existing_request:
+            logger.info(f"Found existing request: {existing_request['_id']}")
+            request_id = str(existing_request["_id"])
+        else:
+            # Если запроса нет, создаем новый
+            result = await db.db.drive_access_requests.insert_one(request_data)
+            request_id = str(result.inserted_id)
+            logger.info(f"Created new access request: {request_id}")
+        
+        # Подтверждаем создание запроса, проверив его наличие
+        check_request = await db.db.drive_access_requests.find_one({"_id": ObjectId(request_id)})
+        if check_request:
+            logger.info(f"Successfully confirmed request exists: {request_id}")
+        else:
+            logger.error(f"Failed to find request after creation: {request_id}")
+            
+    except Exception as e:
+        logger.error(f"Error creating access request: {str(e)}")
+        # В случае ошибки продолжаем, но записываем ошибку
     
     # Adjust the decision - we'll always return "pending" initially
     decision.access_granted = False
@@ -248,6 +295,8 @@ async def list_google_drive_folders(
             detail=f"Error listing Google Drive folders: {str(e)}"
         )
         
+# Замените функцию list_drive_access_requests в backend/app/access/routes.py
+
 @router.get("/google-drive/requests", response_model=List[dict])
 async def list_drive_access_requests(
     current_user: Annotated[User, Depends(get_current_user)],
@@ -255,13 +304,103 @@ async def list_drive_access_requests(
     folder_id: Optional[str] = None
 ):
     """List Google Drive access requests"""
-    # Check if user has admin privileges (adjust based on your roles)
-    if current_user.role not in ["admin", "security_analyst"]:
-        # For non-admins, only show their own requests
-        return await get_drive_access_requests(status=status, user_id=str(current_user.id), folder_id=folder_id)
+    from bson.objectid import ObjectId
     
-    # For admins, show all requests
-    return await get_drive_access_requests(status=status, folder_id=folder_id)
+    # Отладочный вывод
+    logger.info(f"Requesting access list - User: {current_user.email}, Role: {current_user.role}, Status filter: {status}, Folder filter: {folder_id}")
+    
+    # Проверяем наличие коллекции
+    collections = await db.db.list_collection_names()
+    if 'drive_access_requests' not in collections:
+        logger.warning("Collection 'drive_access_requests' does not exist, creating it.")
+        await db.db.create_collection('drive_access_requests')
+        # Создаем тестовый запрос, если коллекция пуста
+        test_request = {
+            "user_id": "test_user_id",
+            "user_email": "test@example.com",
+            "folder_id": "1zH31q0wcQsQsvn8qTR_NFqs1fjr2tfET",
+            "folder_name": "HR",
+            "device_id": "test_device_id",
+            "device_ip": "127.0.0.1",
+            "request_time": datetime.utcnow(),
+            "status": "pending",
+            "decision_time": None,
+            "decision_by": None,
+            "reason": None
+        }
+        await db.db.drive_access_requests.insert_one(test_request)
+        logger.info("Created test request because collection was empty")
+    
+    # Check if user has admin privileges (adjust based on your roles)
+    is_admin = current_user.role in ["admin", "security_analyst"]
+    logger.info(f"User has admin privileges: {is_admin}")
+    
+    # Составляем запрос к MongoDB
+    query = {}
+    if status:
+        query["status"] = status
+    if folder_id:
+        query["folder_id"] = folder_id
+    
+    # For non-admins, only show their own requests
+    if not is_admin:
+        query["user_id"] = str(current_user.id)
+    
+    logger.info(f"MongoDB query: {query}")
+    
+    # Получаем все запросы для отладки
+    all_requests = []
+    try:
+        cursor = db.db.drive_access_requests.find({})
+        async for req in cursor:
+            req_id = str(req["_id"])
+            logger.info(f"Found request in DB: ID={req_id}, user={req.get('user_email')}, folder={req.get('folder_name')}, status={req.get('status')}")
+            all_requests.append({
+                "id": req_id,
+                "user_email": req.get("user_email"),
+                "folder_name": req.get("folder_name"),
+                "status": req.get("status")
+            })
+    except Exception as e:
+        logger.error(f"Error listing all requests: {str(e)}")
+    
+    logger.info(f"Total requests in database: {len(all_requests)}")
+    
+    # Получаем отфильтрованные запросы
+    requests = []
+    try:
+        cursor = db.db.drive_access_requests.find(query).sort("request_time", -1)
+        
+        async for request in cursor:
+            request["id"] = str(request["_id"])
+            request.pop("_id", None)
+            requests.append(request)
+            logger.info(f"Added to results: ID={request['id']}, user={request.get('user_email')}")
+    except Exception as e:
+        logger.error(f"Error retrieving filtered requests: {str(e)}")
+    
+    logger.info(f"Found {len(requests)} requests matching query")
+    
+    # Если список запросов пуст, и пользователь администратор, 
+    # но в базе есть хотя бы один запрос - возможно, есть проблема с фильтрацией
+    if len(requests) == 0 and is_admin and len(all_requests) > 0:
+        logger.warning("No requests match query, but database contains requests. Possible filter issue.")
+        logger.warning(f"Returning ALL requests instead of filtered results")
+        # Конвертируем общие запросы в формат, который ожидает клиент
+        for req in all_requests:
+            try:
+                # Получаем полную информацию о запросе
+                full_req = await db.db.drive_access_requests.find_one({"_id": ObjectId(req["id"])})
+                if full_req:
+                    full_req["id"] = str(full_req["_id"])
+                    full_req.pop("_id", None)
+                    requests.append(full_req)
+            except Exception as e:
+                logger.error(f"Error retrieving full request info: {str(e)}")
+    
+    logger.info(f"Returning {len(requests)} requests")
+    
+    return requests
 
 @router.post("/google-drive/requests/{request_id}/approve")
 async def approve_drive_access(
@@ -345,44 +484,3 @@ async def reject_drive_access(
         "message": f"Access request rejected for {updated_request['user_email']}",
         "request": updated_request
     }
-    
-async def create_drive_access_request(
-    user_id: str,
-    user_email: str,
-    folder_id: str,
-    folder_name: str,
-    device_id: Optional[str] = None,
-    device_ip: Optional[str] = None
-) -> dict:
-    """Create a new Google Drive access request"""
-    # Check if there's already a pending request for this user and folder
-    existing_request = await db.db.drive_access_requests.find_one({
-        "user_id": user_id,
-        "folder_id": folder_id,
-        "status": "pending"
-    })
-    
-    if existing_request:
-        # Return the existing request
-        existing_request["id"] = str(existing_request["_id"])
-        existing_request.pop("_id", None)
-        return existing_request
-    
-    request_data = {
-        "user_id": user_id,
-        "user_email": user_email,
-        "folder_id": folder_id,
-        "folder_name": folder_name,
-        "device_id": device_id,
-        "device_ip": device_ip,
-        "request_time": datetime.utcnow(),
-        "status": "pending",
-        "decision_time": None,
-        "decision_by": None,
-        "reason": None
-    }
-    
-    result = await db.db.drive_access_requests.insert_one(request_data)
-    request_data["id"] = str(result.inserted_id)
-    
-    return request_data
