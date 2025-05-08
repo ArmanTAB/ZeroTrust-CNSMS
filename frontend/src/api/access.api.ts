@@ -119,7 +119,8 @@ const AccessApi = {
    * Get available Google Drive folders
    */
   getGoogleDriveFolders: async (): Promise<any[]> => {
-    const response = await api.get<any[]>("/google-drive/folders");
+    // Change this line to use the correct path
+    const response = await api.get<any[]>("/access/google-drive/folders");
     return response.data;
   },
 
@@ -145,6 +146,55 @@ const AccessApi = {
       accessData
     );
     return response.data;
+  },
+
+  /**
+   * Get Google Drive access requests
+   */
+  getDriveAccessRequests: async (status?: string): Promise<any[]> => {
+    const params = status ? { status } : {};
+    const response = await api.get<any[]>("/access/google-drive/requests", {
+      params,
+    });
+    return response.data;
+  },
+
+  /**
+   * Approve a Google Drive access request
+   */
+  approveDriveAccess: async (
+    requestId: string,
+    reason?: string
+  ): Promise<any> => {
+    const response = await api.post<any>(
+      `/access/google-drive/requests/${requestId}/approve`,
+      { reason }
+    );
+    return response.data;
+  },
+
+  /**
+   * Reject a Google Drive access request
+   */
+  rejectDriveAccess: async (
+    requestId: string,
+    reason?: string
+  ): Promise<any> => {
+    const response = await api.post<any>(
+      `/access/google-drive/requests/${requestId}/reject`,
+      { reason }
+    );
+    return response.data;
+  },
+
+  /**
+   * Check status of user's pending access requests
+   */
+  checkUserAccessRequests: async (folderId: string): Promise<any> => {
+    const response = await api.get<any>("/access/google-drive/requests", {
+      params: { folder_id: folderId },
+    });
+    return response.data.filter((req: any) => req.status === "pending");
   },
 };
 

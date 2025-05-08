@@ -66,3 +66,22 @@ class SecurityAlert(BaseModel):
     user_id: Optional[str] = None
     timestamp: datetime
     resolved: bool = False
+
+class AccessRequestStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+class DriveAccessRequest(BaseModel):
+    id: Optional[str] = None
+    user_id: str
+    user_email: str
+    folder_id: str
+    folder_name: str
+    device_id: Optional[str] = None
+    device_ip: Optional[str] = None
+    request_time: datetime
+    status: AccessRequestStatus = AccessRequestStatus.PENDING
+    decision_time: Optional[datetime] = None
+    decision_by: Optional[str] = None
+    reason: Optional[str] = None

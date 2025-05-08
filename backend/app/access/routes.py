@@ -11,6 +11,7 @@ from .utils import (
 )
 import logging
 from ..common.alerts import get_recent_alerts, generate_sample_alerts
+from ..db import db
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/access", tags=["access"])
@@ -175,7 +176,7 @@ async def request_google_drive_access(
     """
     Request access to Google Drive folder.
     This evaluates the request based on Zero Trust principles and 
-    grants/denies access based on device trust level and user permissions.
+    also creates a pending access request for admin approval.
     """
     # Set timestamp if not provided
     if not access_data.timestamp:
@@ -192,17 +193,28 @@ async def request_google_drive_access(
     
     folder_id = parts[2]
     
+    # Get folder name from the database
+    folder = await db.db.folder_mappings.find_one({"folder_id": folder_id})
+    folder_name = folder["name"] if folder else "Unknown Folder"
+    
     # Evaluate request using Zero Trust principles
     decision = await evaluate_access_request(access_data)
     
-    # If access is granted, you would actually grant access in Google Drive
-    # We'll skip the actual Google Drive integration for now
-    if decision.access_granted:
-        # Add to decision context
-        decision.context["folder_id"] = folder_id
-        
-        # For now, we'll just log that access was granted
-        logger.info(f"Access granted to Google Drive folder {folder_id} for user {current_user.email}")
+    # Create an access request record regardless of the decision
+    await create_drive_access_request(
+        user_id=str(current_user.id),
+        user_email=current_user.email,
+        folder_id=folder_id,
+        folder_name=folder_name,
+        device_id=access_data.device_id,
+        device_ip=access_data.ip_address
+    )
+    
+    # Adjust the decision - we'll always return "pending" initially
+    decision.access_granted = False
+    decision.reason = "Access request has been submitted and is pending approval."
+    decision.context["folder_id"] = folder_id
+    decision.context["request_status"] = "pending"
     
     # Log the access attempt
     log = await log_access_attempt(access_data, decision)
@@ -234,3 +246,94 @@ async def list_google_drive_folders(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error listing Google Drive folders: {str(e)}"
         )
+        
+@router.get("/google-drive/requests", response_model=List[dict])
+async def list_drive_access_requests(
+    current_user: Annotated[User, Depends(get_current_user)],
+    status: Optional[str] = None
+):
+    """List Google Drive access requests"""
+    # Check if user has admin privileges (adjust based on your roles)
+    if current_user.role not in ["admin", "security_analyst"]:
+        # For non-admins, only show their own requests
+        return await get_drive_access_requests(status=status, user_id=str(current_user.id))
+    
+    # For admins, show all requests
+    return await get_drive_access_requests(status=status)
+
+@router.post("/google-drive/requests/{request_id}/approve")
+async def approve_drive_access(
+    request_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    reason: Optional[str] = None
+):
+    """Approve a Google Drive access request"""
+    # Check if user has admin privileges
+    if current_user.role not in ["admin", "security_analyst"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to approve access requests"
+        )
+    
+    # Update the request status
+    updated_request = await update_drive_access_request(
+        request_id=request_id,
+        status="approved",
+        decision_by=str(current_user.id),
+        reason=reason
+    )
+    
+    if not updated_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Access request not found"
+        )
+    
+    # Grant actual access in Google Drive (implement this part with the Google Drive API)
+    try:
+        # This would be where you call the Google Drive API to share the folder
+        # with the user's email
+        pass
+    except Exception as e:
+        logger.error(f"Error granting Google Drive access: {str(e)}")
+        # We'll still return success since the request was approved
+    
+    return {
+        "status": "success",
+        "message": f"Access request approved for {updated_request['user_email']}",
+        "request": updated_request
+    }
+
+@router.post("/google-drive/requests/{request_id}/reject")
+async def reject_drive_access(
+    request_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    reason: Optional[str] = None
+):
+    """Reject a Google Drive access request"""
+    # Check if user has admin privileges
+    if current_user.role not in ["admin", "security_analyst"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to reject access requests"
+        )
+    
+    # Update the request status
+    updated_request = await update_drive_access_request(
+        request_id=request_id,
+        status="rejected",
+        decision_by=str(current_user.id),
+        reason=reason
+    )
+    
+    if not updated_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Access request not found"
+        )
+    
+    return {
+        "status": "success",
+        "message": f"Access request rejected for {updated_request['user_email']}",
+        "request": updated_request
+    }

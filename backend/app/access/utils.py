@@ -330,3 +330,88 @@ async def generate_sample_alerts():
             description="Security patch available for 12 devices",
             severity="low"
         )
+
+async def create_drive_access_request(
+    user_id: str,
+    user_email: str,
+    folder_id: str,
+    folder_name: str,
+    device_id: Optional[str] = None,
+    device_ip: Optional[str] = None
+) -> dict:
+    """Create a new Google Drive access request"""
+    request_data = {
+        "user_id": user_id,
+        "user_email": user_email,
+        "folder_id": folder_id,
+        "folder_name": folder_name,
+        "device_id": device_id,
+        "device_ip": device_ip,
+        "request_time": datetime.utcnow(),
+        "status": "pending",
+        "decision_time": None,
+        "decision_by": None,
+        "reason": None
+    }
+    
+    result = await db.db.drive_access_requests.insert_one(request_data)
+    request_data["id"] = str(result.inserted_id)
+    
+    return request_data
+
+async def get_drive_access_requests(
+    status: Optional[str] = None,
+    user_id: Optional[str] = None,
+    folder_id: Optional[str] = None
+) -> List[dict]:
+    """Get Google Drive access requests with optional filtering"""
+    query = {}
+    
+    if status:
+        query["status"] = status
+    if user_id:
+        query["user_id"] = user_id
+    if folder_id:
+        query["folder_id"] = folder_id
+    
+    requests = []
+    cursor = db.db.drive_access_requests.find(query).sort("request_time", -1)
+    
+    async for request in cursor:
+        request["id"] = str(request["_id"])
+        request.pop("_id", None)
+        requests.append(request)
+    
+    return requests
+
+async def update_drive_access_request(
+    request_id: str,
+    status: str,
+    decision_by: str,
+    reason: Optional[str] = None
+) -> Optional[dict]:
+    """Update a Google Drive access request with a decision"""
+    from bson.objectid import ObjectId
+    
+    update_data = {
+        "status": status,
+        "decision_time": datetime.utcnow(),
+        "decision_by": decision_by,
+        "reason": reason
+    }
+    
+    result = await db.db.drive_access_requests.update_one(
+        {"_id": ObjectId(request_id)},
+        {"$set": update_data}
+    )
+    
+    if result.modified_count == 0:
+        return None
+    
+    # Get updated request
+    updated_request = await db.db.drive_access_requests.find_one({"_id": ObjectId(request_id)})
+    if updated_request:
+        updated_request["id"] = str(updated_request["_id"])
+        updated_request.pop("_id", None)
+    
+    return updated_request
