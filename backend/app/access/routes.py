@@ -1,5 +1,5 @@
 # backend/app/access/routes.py
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from typing import List, Annotated, Optional
 from datetime import datetime, timedelta
 from ..auth.routes import get_current_user
@@ -168,6 +168,7 @@ async def get_security_alerts(
     alerts = await get_recent_alerts(limit, resolved)
     return alerts
 
+# Google Drive access endpoints
 @router.post("/google-drive", response_model=AccessDecision)
 async def request_google_drive_access(
     access_data: AccessLogCreate,
@@ -250,22 +251,23 @@ async def list_google_drive_folders(
 @router.get("/google-drive/requests", response_model=List[dict])
 async def list_drive_access_requests(
     current_user: Annotated[User, Depends(get_current_user)],
-    status: Optional[str] = None
+    status: Optional[str] = None,
+    folder_id: Optional[str] = None
 ):
     """List Google Drive access requests"""
     # Check if user has admin privileges (adjust based on your roles)
     if current_user.role not in ["admin", "security_analyst"]:
         # For non-admins, only show their own requests
-        return await get_drive_access_requests(status=status, user_id=str(current_user.id))
+        return await get_drive_access_requests(status=status, user_id=str(current_user.id), folder_id=folder_id)
     
     # For admins, show all requests
-    return await get_drive_access_requests(status=status)
+    return await get_drive_access_requests(status=status, folder_id=folder_id)
 
 @router.post("/google-drive/requests/{request_id}/approve")
 async def approve_drive_access(
     request_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
-    reason: Optional[str] = None
+    reason: Optional[dict] = Body(None)
 ):
     """Approve a Google Drive access request"""
     # Check if user has admin privileges
@@ -275,12 +277,15 @@ async def approve_drive_access(
             detail="You don't have permission to approve access requests"
         )
     
+    # Extract reason string if provided
+    reason_text = reason.get("reason") if reason else None
+    
     # Update the request status
     updated_request = await update_drive_access_request(
         request_id=request_id,
         status="approved",
         decision_by=str(current_user.id),
-        reason=reason
+        reason=reason_text
     )
     
     if not updated_request:
@@ -308,7 +313,7 @@ async def approve_drive_access(
 async def reject_drive_access(
     request_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
-    reason: Optional[str] = None
+    reason: Optional[dict] = Body(None)
 ):
     """Reject a Google Drive access request"""
     # Check if user has admin privileges
@@ -318,12 +323,15 @@ async def reject_drive_access(
             detail="You don't have permission to reject access requests"
         )
     
+    # Extract reason string if provided
+    reason_text = reason.get("reason") if reason else None
+    
     # Update the request status
     updated_request = await update_drive_access_request(
         request_id=request_id,
         status="rejected",
         decision_by=str(current_user.id),
-        reason=reason
+        reason=reason_text
     )
     
     if not updated_request:
@@ -337,3 +345,44 @@ async def reject_drive_access(
         "message": f"Access request rejected for {updated_request['user_email']}",
         "request": updated_request
     }
+    
+async def create_drive_access_request(
+    user_id: str,
+    user_email: str,
+    folder_id: str,
+    folder_name: str,
+    device_id: Optional[str] = None,
+    device_ip: Optional[str] = None
+) -> dict:
+    """Create a new Google Drive access request"""
+    # Check if there's already a pending request for this user and folder
+    existing_request = await db.db.drive_access_requests.find_one({
+        "user_id": user_id,
+        "folder_id": folder_id,
+        "status": "pending"
+    })
+    
+    if existing_request:
+        # Return the existing request
+        existing_request["id"] = str(existing_request["_id"])
+        existing_request.pop("_id", None)
+        return existing_request
+    
+    request_data = {
+        "user_id": user_id,
+        "user_email": user_email,
+        "folder_id": folder_id,
+        "folder_name": folder_name,
+        "device_id": device_id,
+        "device_ip": device_ip,
+        "request_time": datetime.utcnow(),
+        "status": "pending",
+        "decision_time": None,
+        "decision_by": None,
+        "reason": None
+    }
+    
+    result = await db.db.drive_access_requests.insert_one(request_data)
+    request_data["id"] = str(result.inserted_id)
+    
+    return request_data

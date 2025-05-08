@@ -340,6 +340,19 @@ async def create_drive_access_request(
     device_ip: Optional[str] = None
 ) -> dict:
     """Create a new Google Drive access request"""
+    # Check if there's already a pending request for this user and folder
+    existing_request = await db.db.drive_access_requests.find_one({
+        "user_id": user_id,
+        "folder_id": folder_id,
+        "status": "pending"
+    })
+    
+    if existing_request:
+        # Return the existing request
+        existing_request["id"] = str(existing_request["_id"])
+        existing_request.pop("_id", None)
+        return existing_request
+    
     request_data = {
         "user_id": user_id,
         "user_email": user_email,

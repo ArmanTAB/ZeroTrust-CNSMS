@@ -1,4 +1,4 @@
-// src/api/access.api.ts
+// frontend/src/api/access.api.ts
 import api from "./api";
 import {
   AccessLog,
@@ -10,7 +10,7 @@ import {
 
 const AccessApi = {
   /**
-   * Запрос на доступ к ресурсу (без логирования)
+   * Request access to a resource (without logging)
    */
   requestAccess: async (
     accessData: AccessLogCreate
@@ -23,7 +23,7 @@ const AccessApi = {
   },
 
   /**
-   * Запрос на доступ к ресурсу с логированием
+   * Request access with logging
    */
   logAccess: async (accessData: AccessLogCreate): Promise<any> => {
     const response = await api.post<any>("/access/log", accessData);
@@ -31,7 +31,7 @@ const AccessApi = {
   },
 
   /**
-   * Получить логи доступа с возможностью фильтрации
+   * Get access logs with optional filtering
    */
   getAccessLogs: async (
     params: {
@@ -50,7 +50,7 @@ const AccessApi = {
   },
 
   /**
-   * Получить статистику доступа
+   * Get access statistics
    */
   getAccessStatistics: async (days: number = 7): Promise<AccessStatistics> => {
     const response = await api.get<AccessStatistics>("/access/statistics", {
@@ -60,7 +60,7 @@ const AccessApi = {
   },
 
   /**
-   * Получить статистику активности доступа по дням недели
+   * Get access activity statistics by day
    */
   getAccessActivity: async (days: number = 7): Promise<any[]> => {
     try {
@@ -70,7 +70,7 @@ const AccessApi = {
       return response.data;
     } catch (error) {
       console.error("Error fetching access activity:", error);
-      // Возвращаем моки в случае ошибки
+      // Return mock data if needed
       return [
         { day: "Mon", allowed: 25, denied: 5 },
         { day: "Tue", allowed: 30, denied: 8 },
@@ -83,6 +83,9 @@ const AccessApi = {
     }
   },
 
+  /**
+   * Get security alerts
+   */
   getSecurityAlerts: async (limit: number = 5): Promise<any[]> => {
     try {
       const response = await api.get<any[]>("/access/alerts", {
@@ -91,27 +94,7 @@ const AccessApi = {
       return response.data;
     } catch (error) {
       console.error("Error fetching security alerts:", error);
-      // Возвращаем моки в случае ошибки
-      return [
-        {
-          id: "1",
-          alert_type: "login_failure",
-          title: "Multiple login failures detected",
-          description: "5 failed login attempts from IP 192.168.1.25",
-          severity: "high",
-          source_ip: "192.168.1.25",
-          timestamp: new Date(Date.now() - 600000).toISOString(), // 10 минут назад
-        },
-        {
-          id: "2",
-          alert_type: "new_device",
-          title: "New device connected",
-          description: "Unrecognized device with high risk score",
-          severity: "medium",
-          device_id: "test-device-003",
-          timestamp: new Date(Date.now() - 2700000).toISOString(), // 45 минут назад
-        },
-      ];
+      return [];
     }
   },
 
@@ -119,9 +102,14 @@ const AccessApi = {
    * Get available Google Drive folders
    */
   getGoogleDriveFolders: async (): Promise<any[]> => {
-    // Change this line to use the correct path
-    const response = await api.get<any[]>("/access/google-drive/folders");
-    return response.data;
+    try {
+      const response = await api.get<any[]>("/access/google-drive/folders");
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching Google Drive folders:", error);
+      // Return empty array on error
+      return [];
+    }
   },
 
   /**
@@ -152,11 +140,17 @@ const AccessApi = {
    * Get Google Drive access requests
    */
   getDriveAccessRequests: async (status?: string): Promise<any[]> => {
-    const params = status ? { status } : {};
-    const response = await api.get<any[]>("/access/google-drive/requests", {
-      params,
-    });
-    return response.data;
+    try {
+      const params = status ? { status } : {};
+      const response = await api.get<any[]>("/access/google-drive/requests", {
+        params,
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching Google Drive access requests:", error);
+      // Return empty array on error
+      return [];
+    }
   },
 
   /**
@@ -190,11 +184,16 @@ const AccessApi = {
   /**
    * Check status of user's pending access requests
    */
-  checkUserAccessRequests: async (folderId: string): Promise<any> => {
-    const response = await api.get<any>("/access/google-drive/requests", {
-      params: { folder_id: folderId },
-    });
-    return response.data.filter((req: any) => req.status === "pending");
+  checkUserAccessRequests: async (folderId: string): Promise<any[]> => {
+    try {
+      const response = await api.get<any[]>("/access/google-drive/requests", {
+        params: { folder_id: folderId, status: "pending" },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error checking access requests status:", error);
+      return [];
+    }
   },
 };
 
