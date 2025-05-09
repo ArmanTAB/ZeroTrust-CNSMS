@@ -132,13 +132,15 @@ const AccessApi = {
   getDriveAccessRequests: async (status?: string): Promise<any[]> => {
     try {
       const params = status ? { status } : {};
+      console.log("Requesting access requests with params:", params);
       const response = await api.get<any[]>("/access/google-drive/requests", {
         params,
       });
+      console.log("API response:", response.data);
       return response.data;
     } catch (error) {
       console.error("Error fetching Google Drive access requests:", error);
-      return [];
+      throw error; // Re-throw to let the component handle it
     }
   },
 
@@ -196,7 +198,7 @@ const AccessApi = {
       console.error("Error syncing Google Drive folders:", error);
       throw error;
     }
-  }
+  },
 };
 
 export default AccessApi;

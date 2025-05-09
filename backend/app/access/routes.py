@@ -308,38 +308,7 @@ async def list_drive_access_requests(
     folder_id: Optional[str] = None
 ):
     """List Google Drive access requests"""
-    from bson.objectid import ObjectId
-    
-    # Отладочный вывод
-    logger.info(f"Requesting access list - User: {current_user.email}, Role: {current_user.role}, Status filter: {status}, Folder filter: {folder_id}")
-    
-    # Проверяем наличие коллекции
-    collections = await db.db.list_collection_names()
-    if 'drive_access_requests' not in collections:
-        logger.warning("Collection 'drive_access_requests' does not exist, creating it.")
-        await db.db.create_collection('drive_access_requests')
-        # Создаем тестовый запрос, если коллекция пуста
-        test_request = {
-            "user_id": "test_user_id",
-            "user_email": "test@example.com",
-            "folder_id": "1zH31q0wcQsQsvn8qTR_NFqs1fjr2tfET",
-            "folder_name": "HR",
-            "device_id": "test_device_id",
-            "device_ip": "127.0.0.1",
-            "request_time": datetime.utcnow(),
-            "status": "pending",
-            "decision_time": None,
-            "decision_by": None,
-            "reason": None
-        }
-        await db.db.drive_access_requests.insert_one(test_request)
-        logger.info("Created test request because collection was empty")
-    
-    # Check if user has admin privileges (adjust based on your roles)
-    is_admin = current_user.role in ["admin", "security_analyst"]
-    logger.info(f"User has admin privileges: {is_admin}")
-    
-    # Составляем запрос к MongoDB
+    # Build query
     query = {}
     if status:
         query["status"] = status
@@ -347,30 +316,10 @@ async def list_drive_access_requests(
         query["folder_id"] = folder_id
     
     # For non-admins, only show their own requests
-    if not is_admin:
+    if current_user.role not in ["admin", "security_analyst"]:
         query["user_id"] = str(current_user.id)
     
-    logger.info(f"MongoDB query: {query}")
-    
-    # Получаем все запросы для отладки
-    all_requests = []
-    try:
-        cursor = db.db.drive_access_requests.find({})
-        async for req in cursor:
-            req_id = str(req["_id"])
-            logger.info(f"Found request in DB: ID={req_id}, user={req.get('user_email')}, folder={req.get('folder_name')}, status={req.get('status')}")
-            all_requests.append({
-                "id": req_id,
-                "user_email": req.get("user_email"),
-                "folder_name": req.get("folder_name"),
-                "status": req.get("status")
-            })
-    except Exception as e:
-        logger.error(f"Error listing all requests: {str(e)}")
-    
-    logger.info(f"Total requests in database: {len(all_requests)}")
-    
-    # Получаем отфильтрованные запросы
+    # Get requests directly from database
     requests = []
     try:
         cursor = db.db.drive_access_requests.find(query).sort("request_time", -1)
@@ -379,31 +328,10 @@ async def list_drive_access_requests(
             request["id"] = str(request["_id"])
             request.pop("_id", None)
             requests.append(request)
-            logger.info(f"Added to results: ID={request['id']}, user={request.get('user_email')}")
     except Exception as e:
-        logger.error(f"Error retrieving filtered requests: {str(e)}")
+        logger.error(f"Error retrieving access requests: {str(e)}")
     
-    logger.info(f"Found {len(requests)} requests matching query")
-    
-    # Если список запросов пуст, и пользователь администратор, 
-    # но в базе есть хотя бы один запрос - возможно, есть проблема с фильтрацией
-    if len(requests) == 0 and is_admin and len(all_requests) > 0:
-        logger.warning("No requests match query, but database contains requests. Possible filter issue.")
-        logger.warning(f"Returning ALL requests instead of filtered results")
-        # Конвертируем общие запросы в формат, который ожидает клиент
-        for req in all_requests:
-            try:
-                # Получаем полную информацию о запросе
-                full_req = await db.db.drive_access_requests.find_one({"_id": ObjectId(req["id"])})
-                if full_req:
-                    full_req["id"] = str(full_req["_id"])
-                    full_req.pop("_id", None)
-                    requests.append(full_req)
-            except Exception as e:
-                logger.error(f"Error retrieving full request info: {str(e)}")
-    
-    logger.info(f"Returning {len(requests)} requests")
-    
+    logger.info(f"Found {len(requests)} requests matching query {query}")
     return requests
 
 @router.post("/google-drive/requests/{request_id}/approve")

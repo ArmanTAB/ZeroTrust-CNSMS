@@ -196,3 +196,19 @@ class GoogleDriveService:
         except Exception as e:
             logger.error(f"Error syncing folder mappings: {str(e)}")
             return False
+            
+    def list_pending_access_requests(self):
+        """Get pending access requests from Google Drive"""
+        if not self.service:
+            logger.error("Not authenticated with Google Drive")
+            raise Exception("Not authenticated with Google Drive")
+            
+        try:
+            # This requires more advanced permissions - may not be available with your current service account
+            # You'd need to implement the Drive API's permissions.list endpoint with appropriate filters
+            # This is a placeholder for the functionality
+            logger.info("Attempting to query Drive API for pending requests")
+            return []
+        except HttpError as e:
+            logger.error(f"Error querying pending requests: {str(e)}")
+            return []

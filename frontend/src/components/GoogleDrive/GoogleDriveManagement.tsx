@@ -99,7 +99,9 @@ const GoogleDriveManagement: React.FC = () => {
 
     setLoading(true);
     try {
+      console.log("Fetching access requests with status:", filter.status);
       const requests = await AccessApi.getDriveAccessRequests(filter.status);
+      console.log("Retrieved requests:", requests); // Debug log
 
       // Filter by search term if provided
       const filteredRequests = filter.search
