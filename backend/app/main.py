@@ -5,6 +5,7 @@ from app.auth.routes import router as auth_router
 from app.devices.routes import router as devices_router
 from app.access.routes import router as access_router
 from app.devices.vulnerability_routes import router as vulnerability_router
+from app.access.google_drive_routes import router as google_drive_router
 from app.db import connect_to_mongo, close_mongo_connection
 import logging
 
@@ -58,6 +59,9 @@ app.include_router(access_router)
 
 logger.info("Including vulnerability router")
 app.include_router(vulnerability_router)
+
+logger.info("Including Google Drive router")
+app.include_router(google_drive_router)
 
 @app.get("/")
 async def root():

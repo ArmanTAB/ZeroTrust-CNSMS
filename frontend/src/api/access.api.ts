@@ -70,16 +70,7 @@ const AccessApi = {
       return response.data;
     } catch (error) {
       console.error("Error fetching access activity:", error);
-      // Return mock data if needed
-      return [
-        { day: "Mon", allowed: 25, denied: 5 },
-        { day: "Tue", allowed: 30, denied: 8 },
-        { day: "Wed", allowed: 35, denied: 7 },
-        { day: "Thu", allowed: 28, denied: 9 },
-        { day: "Fri", allowed: 32, denied: 12 },
-        { day: "Sat", allowed: 18, denied: 3 },
-        { day: "Sun", allowed: 15, denied: 2 },
-      ];
+      return [];
     }
   },
 
@@ -107,7 +98,6 @@ const AccessApi = {
       return response.data;
     } catch (error) {
       console.error("Error fetching Google Drive folders:", error);
-      // Return empty array on error
       return [];
     }
   },
@@ -148,7 +138,6 @@ const AccessApi = {
       return response.data;
     } catch (error) {
       console.error("Error fetching Google Drive access requests:", error);
-      // Return empty array on error
       return [];
     }
   },
@@ -195,6 +184,19 @@ const AccessApi = {
       return [];
     }
   },
+
+  /**
+   * Synchronize Google Drive folders with the database
+   */
+  syncGoogleDriveFolders: async (): Promise<any> => {
+    try {
+      const response = await api.post<any>("/access/google-drive/sync-folders");
+      return response.data;
+    } catch (error) {
+      console.error("Error syncing Google Drive folders:", error);
+      throw error;
+    }
+  }
 };
 
 export default AccessApi;
