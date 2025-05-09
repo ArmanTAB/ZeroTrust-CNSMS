@@ -98,32 +98,41 @@ const AccessApi = {
       return response.data;
     } catch (error) {
       console.error("Error fetching Google Drive folders:", error);
-      return [];
+      throw error; // Re-throw to let components handle the error
     }
   },
 
   /**
    * Request access to a Google Drive folder
    */
-  requestGoogleDriveAccess: async (
-    folderId: string
-  ): Promise<AccessDecision> => {
+  requestGoogleDriveAccess: async (folderId: string): Promise<any> => {
     // Get current device ID from local storage or generate a new one
-    const deviceId = localStorage.getItem("device_id") || "unknown-device";
+    const getDeviceId = () => {
+      let deviceId = localStorage.getItem("device_id");
+      if (!deviceId) {
+        // Generate a simple device ID based on browser/device info
+        deviceId = `web-${Math.random().toString(36).substring(2, 9)}`;
+        localStorage.setItem("device_id", deviceId);
+      }
+      return deviceId;
+    };
 
     const accessData = {
-      device_id: deviceId,
+      device_id: getDeviceId(),
       ip_address: "", // Will be determined by backend
       user_agent: navigator.userAgent,
       resource: `google-drive:folder:${folderId}`,
       access_type: AccessType.READ,
+      context: { timestamp: new Date().toISOString() },
     };
 
-    const response = await api.post<AccessDecision>(
-      "/access/google-drive",
-      accessData
-    );
-    return response.data;
+    try {
+      const response = await api.post<any>("/access/google-drive", accessData);
+      return response.data;
+    } catch (error) {
+      console.error("Error requesting Google Drive access:", error);
+      throw error; // Re-throw to let components handle the error
+    }
   },
 
   /**
@@ -175,15 +184,33 @@ const AccessApi = {
   /**
    * Check status of user's pending access requests
    */
-  checkUserAccessRequests: async (folderId: string): Promise<any[]> => {
+  checkUserAccessRequests: async (folderId: string): Promise<any> => {
     try {
-      const response = await api.get<any[]>("/access/google-drive/requests", {
-        params: { folder_id: folderId, status: "pending" },
-      });
+      const response = await api.get<any>(
+        "/access/google-drive/check-requests",
+        {
+          params: { folder_id: folderId },
+        }
+      );
       return response.data;
     } catch (error) {
       console.error("Error checking access requests status:", error);
-      return [];
+      return { has_request: false };
+    }
+  },
+
+  /**
+   * Get detailed information about a specific folder
+   */
+  getFolderDetails: async (folderId: string): Promise<any> => {
+    try {
+      const response = await api.get<any>(
+        `/access/google-drive/folder/${folderId}`
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching folder details:", error);
+      throw error;
     }
   },
 

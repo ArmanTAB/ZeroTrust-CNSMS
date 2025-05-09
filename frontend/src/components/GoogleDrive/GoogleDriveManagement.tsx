@@ -28,6 +28,7 @@ interface AccessRequest {
   status: "pending" | "approved" | "rejected";
   decision_time?: string;
   decision_by?: string;
+  decision_by_email?: string;
   reason?: string;
 }
 
@@ -57,8 +58,16 @@ const GoogleDriveManagement: React.FC = () => {
     status: "pending",
   });
   const [syncingFolders, setSyncingFolders] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   const isAdmin = user?.role === "admin" || user?.role === "security_analyst";
+
+  // If user is admin, show the requests tab by default
+  useEffect(() => {
+    if (isAdmin) {
+      setActiveTab("requests");
+    }
+  }, [isAdmin]);
 
   useEffect(() => {
     if (activeTab === "folders") {
@@ -70,24 +79,23 @@ const GoogleDriveManagement: React.FC = () => {
 
   const fetchFolders = async (): Promise<void> => {
     setLoading(true);
+    setError(null);
     try {
       const response = await AccessApi.getGoogleDriveFolders();
 
-      // For each folder, check if there are pending requests
-      const folderWithStatus = await Promise.all(
-        response.map(async (folder: Folder) => {
-          const requests = await AccessApi.checkUserAccessRequests(folder.id);
-          return {
-            ...folder,
-            hasPendingRequest: requests.length > 0,
-            sensitivityLabel: getSensitivityLabel(folder.sensitivity),
-          };
-        })
-      );
+      // Process folders with sensitivity labels
+      const foldersWithLabels = response.map((folder: Folder) => ({
+        ...folder,
+        sensitivityLabel: getSensitivityLabel(folder.sensitivity),
+      }));
 
-      setFolders(folderWithStatus);
+      console.log("Fetched folders:", foldersWithLabels);
+      setFolders(foldersWithLabels);
     } catch (error) {
       console.error("Error fetching folders:", error);
+      setError(
+        "Failed to fetch Google Drive folders. Please make sure the service account has access to your Google Drive."
+      );
       showToast("Failed to fetch Google Drive folders", "error");
     } finally {
       setLoading(false);
@@ -98,10 +106,11 @@ const GoogleDriveManagement: React.FC = () => {
     if (!isAdmin) return;
 
     setLoading(true);
+    setError(null);
     try {
       console.log("Fetching access requests with status:", filter.status);
       const requests = await AccessApi.getDriveAccessRequests(filter.status);
-      console.log("Retrieved requests:", requests); // Debug log
+      console.log("Retrieved requests:", requests);
 
       // Filter by search term if provided
       const filteredRequests = filter.search
@@ -119,6 +128,7 @@ const GoogleDriveManagement: React.FC = () => {
       setAccessRequests(filteredRequests);
     } catch (error) {
       console.error("Error fetching access requests:", error);
+      setError("Failed to fetch access requests");
       showToast("Failed to fetch access requests", "error");
     } finally {
       setLoading(false);
@@ -133,24 +143,24 @@ const GoogleDriveManagement: React.FC = () => {
     try {
       const result = await AccessApi.requestGoogleDriveAccess(folderId);
 
-      // Check if access was directly granted (if user already has access)
-      if (result.access_granted) {
+      // Check result status
+      if (result.status === "success" && result.access_granted) {
         showToast(
-          result.reason || "You already have access to this folder",
+          result.message || "You already have access to this folder",
           "success"
         );
-      } else {
+      } else if (result.status === "pending") {
         showToast("Access request submitted and is pending approval", "info");
-      }
 
-      // Update folder in state to show pending request
-      setFolders((prev) =>
-        prev.map((f) =>
-          f.id === folderId
-            ? { ...f, hasPendingRequest: !result.access_granted }
-            : f
-        )
-      );
+        // Update folder in state to show pending request
+        setFolders((prev) =>
+          prev.map((f) =>
+            f.id === folderId ? { ...f, hasPendingRequest: true } : f
+          )
+        );
+      } else {
+        showToast(result.message || "Request submitted", "info");
+      }
     } catch (error) {
       console.error("Error requesting access:", error);
       showToast("Failed to request access", "error");
@@ -210,7 +220,7 @@ const GoogleDriveManagement: React.FC = () => {
       setAccessRequests((prev) =>
         prev.map((req) =>
           req.id === selectedRequest.id
-            ? { ...req, status: "rejected" as const }
+            ? { ...req, status: "rejected" as const, reason: rejectReason }
             : req
         )
       );
@@ -229,8 +239,9 @@ const GoogleDriveManagement: React.FC = () => {
 
     setSyncingFolders(true);
     try {
-      await AccessApi.syncGoogleDriveFolders();
+      const result = await AccessApi.syncGoogleDriveFolders();
       showToast("Successfully synchronized Google Drive folders", "success");
+
       // Refresh folders
       await fetchFolders();
     } catch (error) {
@@ -285,6 +296,39 @@ const GoogleDriveManagement: React.FC = () => {
     }));
   };
 
+  // Apply search filter
+  const applySearchFilter = (): void => {
+    fetchAccessRequests();
+  };
+
+  const renderErrorMessage = (): JSX.Element | null => {
+    if (!error) return null;
+
+    return (
+      <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
+        <div className="flex items-start">
+          <div className="flex-shrink-0">
+            <svg
+              className="h-5 w-5 text-red-400"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </div>
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-red-800">Error</h3>
+            <div className="mt-1 text-sm text-red-700">{error}</div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderFolders = (): JSX.Element => (
     <>
       {isAdmin && (
@@ -329,67 +373,117 @@ const GoogleDriveManagement: React.FC = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {folders.map((folder) => (
-          <div
-            key={folder.id}
-            className="bg-white rounded-lg shadow-md overflow-hidden"
+      {renderErrorMessage()}
+
+      {folders.length === 0 && !loading && !error ? (
+        <div className="bg-white rounded-lg shadow-md p-6 text-center">
+          <svg
+            className="mx-auto h-12 w-12 text-gray-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
           >
-            <div className="p-6">
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
-                  <svg
-                    className="w-6 h-6"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-                    />
-                  </svg>
-                </div>
-                <h3 className="ml-3 text-xl font-medium text-gray-900">
-                  {folder.name}
-                </h3>
-              </div>
-
-              <div className="mb-4">
-                <span
-                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
-                 ${folder.sensitivityLabel?.class || ""}`}
-                >
-                  {folder.sensitivityLabel?.label || folder.sensitivity}
-                </span>
-              </div>
-
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"
+            />
+          </svg>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">
+            No folders found
+          </h3>
+          <p className="mt-1 text-sm text-gray-500">
+            No Google Drive folders available. Make sure the service account has
+            access to your folders.
+          </p>
+          {isAdmin && (
+            <div className="mt-6">
               <button
-                onClick={() => handleRequestAccess(folder.id, folder.name)}
-                disabled={
-                  accessRequesting === folder.id ||
-                  Boolean(folder.hasPendingRequest)
-                }
-                className={`w-full py-2 px-4 rounded-md ${
-                  folder.hasPendingRequest
-                    ? "bg-yellow-100 text-yellow-800 cursor-default"
-                    : accessRequesting === folder.id
-                    ? "bg-blue-400 text-white cursor-wait"
-                    : "bg-blue-600 hover:bg-blue-700 text-white"
-                }`}
+                type="button"
+                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                onClick={handleSyncGoogleDriveFolders}
               >
-                {folder.hasPendingRequest
-                  ? "Request Pending"
-                  : accessRequesting === folder.id
-                  ? "Requesting..."
-                  : "Request Access"}
+                <svg
+                  className="-ml-1 mr-2 h-5 w-5"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                Sync Folders
               </button>
             </div>
-          </div>
-        ))}
-      </div>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {folders.map((folder) => (
+            <div
+              key={folder.id}
+              className="bg-white rounded-lg shadow-md overflow-hidden"
+            >
+              <div className="p-6">
+                <div className="flex items-center mb-4">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
+                    <svg
+                      className="w-6 h-6"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                      />
+                    </svg>
+                  </div>
+                  <h3 className="ml-3 text-xl font-medium text-gray-900">
+                    {folder.name}
+                  </h3>
+                </div>
+
+                <div className="mb-4">
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                 ${folder.sensitivityLabel?.class || ""}`}
+                  >
+                    {folder.sensitivityLabel?.label || folder.sensitivity}
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => handleRequestAccess(folder.id, folder.name)}
+                  disabled={
+                    accessRequesting === folder.id ||
+                    Boolean(folder.hasPendingRequest)
+                  }
+                  className={`w-full py-2 px-4 rounded-md ${
+                    folder.hasPendingRequest
+                      ? "bg-yellow-100 text-yellow-800 cursor-default"
+                      : accessRequesting === folder.id
+                      ? "bg-blue-400 text-white cursor-wait"
+                      : "bg-blue-600 hover:bg-blue-700 text-white"
+                  }`}
+                >
+                  {folder.hasPendingRequest
+                    ? "Request Pending"
+                    : accessRequesting === folder.id
+                    ? "Requesting..."
+                    : "Request Access"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </>
   );
 
@@ -451,6 +545,8 @@ const GoogleDriveManagement: React.FC = () => {
   const renderAccessRequests = (): JSX.Element => (
     <>
       {renderRequestsFilter()}
+
+      {renderErrorMessage()}
 
       <div className="bg-white shadow-md rounded-lg overflow-hidden">
         {accessRequests.length === 0 ? (
@@ -515,7 +611,9 @@ const GoogleDriveManagement: React.FC = () => {
                         {request.user_email}
                       </div>
                       <div className="text-xs text-gray-500">
-                        Device: {request.device_id || "Unknown"}
+                        {request.device_id
+                          ? `Device: ${request.device_id}`
+                          : ""}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -565,8 +663,21 @@ const GoogleDriveManagement: React.FC = () => {
                           </button>
                         </div>
                       )}
-                      {request.status !== "pending" && request.reason && (
-                        <span className="text-gray-500">{request.reason}</span>
+                      {request.status !== "pending" && (
+                        <div>
+                          {request.reason ? (
+                            <span className="text-gray-500">
+                              Reason: {request.reason}
+                            </span>
+                          ) : (
+                            <span className="text-gray-500">
+                              {request.status === "approved"
+                                ? "Approved"
+                                : "Rejected"}{" "}
+                              by {request.decision_by_email || "admin"}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -603,7 +714,16 @@ const GoogleDriveManagement: React.FC = () => {
                 }`}
                 onClick={() => setActiveTab("requests")}
               >
-                Access Requests
+                Access Requests{" "}
+                {accessRequests.filter((req) => req.status === "pending")
+                  .length > 0 && (
+                  <span className="ml-1 px-2 py-0.5 text-xs bg-red-100 text-red-800 rounded-full">
+                    {
+                      accessRequests.filter((req) => req.status === "pending")
+                        .length
+                    }
+                  </span>
+                )}
               </button>
             </nav>
           </div>
@@ -669,7 +789,9 @@ const GoogleDriveManagement: React.FC = () => {
                     </h3>
                     <div className="mt-2">
                       <p className="text-sm text-gray-500">
-                        Are you sure you want to reject this access request?
+                        Are you sure you want to reject this access request from{" "}
+                        <strong>{selectedRequest?.user_email}</strong> for
+                        folder <strong>{selectedRequest?.folder_name}</strong>?
                         This action cannot be undone.
                       </p>
                       <div className="mt-4">

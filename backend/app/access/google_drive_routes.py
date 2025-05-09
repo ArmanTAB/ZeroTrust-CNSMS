@@ -1,11 +1,11 @@
 # backend/app/access/google_drive_routes.py
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Query
 from typing import List, Annotated, Optional
 from datetime import datetime
 from ..auth.routes import get_current_user
 from ..auth.models import User
 from .models import AccessLogCreate, AccessDecision, DriveAccessRequest, AccessRequestStatus
-from .utils import evaluate_access_request, log_access_attempt, update_drive_access_request
+from .utils import evaluate_access_request, log_access_attempt
 from ..integrations.google_drive import GoogleDriveService
 from ..db import db
 import logging
@@ -25,6 +25,7 @@ async def list_google_drive_folders(
         
         # Try to get real folders from Google Drive
         try:
+            # First attempt to get folders directly from the API
             real_folders = drive_service.list_folders()
             
             # Convert to response format
@@ -42,14 +43,23 @@ async def list_google_drive_folders(
                     }
                     await db.db.folder_mappings.insert_one(db_folder)
                 
+                # Check if user has pending requests for this folder
+                pending_request = await db.db.drive_access_requests.find_one({
+                    "user_id": str(current_user.id),
+                    "folder_id": folder["id"],
+                    "status": "pending"
+                })
+                
                 # Build response object
                 folders.append({
                     "id": folder["id"],
                     "name": folder["name"],
-                    "sensitivity": db_folder.get("sensitivity", "internal")
+                    "sensitivity": db_folder.get("sensitivity", "internal"),
+                    "has_pending_request": pending_request is not None
                 })
             
             return folders
+            
         except Exception as e:
             logger.error(f"Error getting folders from Google Drive: {str(e)}")
             # Fall back to database folders if Google Drive API fails
@@ -57,10 +67,18 @@ async def list_google_drive_folders(
             folders = []
             
             async for folder in cursor:
+                # Check if user has pending requests for this folder
+                pending_request = await db.db.drive_access_requests.find_one({
+                    "user_id": str(current_user.id),
+                    "folder_id": folder["folder_id"],
+                    "status": "pending"
+                })
+                
                 folders.append({
                     "id": folder["folder_id"],
                     "name": folder["name"],
-                    "sensitivity": folder["sensitivity"]
+                    "sensitivity": folder["sensitivity"],
+                    "has_pending_request": pending_request is not None
                 })
             
             return folders
@@ -71,15 +89,14 @@ async def list_google_drive_folders(
             detail=f"Error listing Google Drive folders: {str(e)}"
         )
 
-@router.post("", response_model=AccessDecision)
+@router.post("", response_model=dict)
 async def request_google_drive_access(
     access_data: AccessLogCreate,
     current_user: Annotated[User, Depends(get_current_user)]
 ):
     """
     Request access to Google Drive folder.
-    This evaluates the request based on Zero Trust principles and 
-    also creates a pending access request for admin approval.
+    This creates a pending access request for admin approval.
     """
     logger.info(f"Processing Google Drive access request from {current_user.email}")
     
@@ -111,69 +128,79 @@ async def request_google_drive_access(
         
         if has_access:
             # User already has access, no need to request
-            decision = AccessDecision(
-                access_granted=True,
-                reason=f"You already have {role} access to this folder",
-                risk_level=0.0,
-                context={"folder_id": folder_id, "existing_role": role}
-            )
-            
-            # Log the access attempt
-            await log_access_attempt(access_data, decision)
-            
-            return decision
+            return {
+                "status": "success",
+                "message": f"You already have {role} access to this folder",
+                "folder_id": folder_id,
+                "access_granted": True
+            }
     except Exception as e:
         logger.error(f"Error checking existing access: {str(e)}")
         # Continue with the request process
     
-    # Evaluate request using Zero Trust principles
-    decision = await evaluate_access_request(access_data)
+    # Check if a request already exists
+    existing_request = await db.db.drive_access_requests.find_one({
+        "user_id": str(current_user.id),
+        "folder_id": folder_id,
+        "status": "pending"
+    })
     
-    # Create an access request record regardless of the decision
-    try:
-        # Check if a request already exists
-        existing_request = await db.db.drive_access_requests.find_one({
-            "user_id": str(current_user.id),
+    if existing_request:
+        logger.info(f"Found existing pending request: {existing_request['_id']}")
+        return {
+            "status": "pending",
+            "message": "You already have a pending access request for this folder",
             "folder_id": folder_id,
-            "status": AccessRequestStatus.PENDING
-        })
+            "request_id": str(existing_request["_id"]),
+            "access_granted": False
+        }
+    
+    # Create new access request
+    try:
+        request_data = {
+            "user_id": str(current_user.id),
+            "user_email": current_user.email,
+            "folder_id": folder_id,
+            "folder_name": folder_name,
+            "device_id": access_data.device_id,
+            "device_ip": access_data.ip_address,
+            "request_time": datetime.utcnow(),
+            "status": "pending",
+            "decision_time": None,
+            "decision_by": None,
+            "reason": None
+        }
         
-        if existing_request:
-            logger.info(f"Found existing request: {existing_request['_id']}")
-            request_id = str(existing_request["_id"])
-        else:
-            # Create new request
-            request_data = {
-                "user_id": str(current_user.id),
-                "user_email": current_user.email,
-                "folder_id": folder_id,
-                "folder_name": folder_name,
-                "device_id": access_data.device_id,
-                "device_ip": access_data.ip_address,
-                "request_time": datetime.utcnow(),
-                "status": AccessRequestStatus.PENDING,
-                "decision_time": None,
-                "decision_by": None,
-                "reason": None
-            }
-            
-            result = await db.db.drive_access_requests.insert_one(request_data)
-            request_id = str(result.inserted_id)
-            logger.info(f"Created new access request with ID: {request_id}")
+        # Make sure the collection exists
+        collections = await db.db.list_collection_names()
+        if 'drive_access_requests' not in collections:
+            await db.db.create_collection('drive_access_requests')
+        
+        result = await db.db.drive_access_requests.insert_one(request_data)
+        request_id = str(result.inserted_id)
+        
+        # Log the access attempt with denied status (pending approval)
+        access_decision = AccessDecision(
+            access_granted=False,
+            reason="Access request is pending approval",
+            risk_level=50.0,
+            context={"folder_id": folder_id, "request_status": "pending"}
+        )
+        await log_access_attempt(access_data, access_decision)
+        
+        return {
+            "status": "pending",
+            "message": "Access request has been submitted and is pending approval",
+            "folder_id": folder_id,
+            "request_id": request_id,
+            "access_granted": False
+        }
     except Exception as e:
         logger.error(f"Error creating access request: {str(e)}")
-        request_id = None
-    
-    # Adjust the decision - we'll always return "pending" initially
-    decision.access_granted = False
-    decision.reason = "Access request has been submitted and is pending approval."
-    decision.context["folder_id"] = folder_id
-    decision.context["request_status"] = "pending"
-    
-    # Log the access attempt
-    await log_access_attempt(access_data, decision)
-    
-    return decision
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating access request: {str(e)}"
+        )
 
 @router.get("/requests", response_model=List[dict])
 async def list_drive_access_requests(
@@ -205,10 +232,15 @@ async def list_drive_access_requests(
             request["id"] = str(request["_id"])
             request.pop("_id", None)
             requests.append(request)
+        
+        logger.info(f"Found {len(requests)} access requests matching query")
+        return requests
     except Exception as e:
         logger.error(f"Error retrieving access requests: {str(e)}")
-    
-    return requests
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving access requests: {str(e)}"
+        )
 
 @router.post("/requests/{request_id}/approve")
 async def approve_drive_access(
@@ -228,65 +260,96 @@ async def approve_drive_access(
     reason_text = reason.get("reason") if reason else None
     
     # Get the request details
-    request = await db.db.drive_access_requests.find_one({"_id": ObjectId(request_id)})
-    if not request:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Access request not found"
-        )
-    
-    # Update the request status
-    updated_request = await update_drive_access_request(
-        request_id=request_id,
-        status="approved",
-        decision_by=str(current_user.id),
-        reason=reason_text
-    )
-    
-    if not updated_request:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Access request not found"
-        )
-    
-    # Grant actual access in Google Drive
-    success = False
-    error_message = None
     try:
-        drive_service = GoogleDriveService.get_instance()
-        
-        # Check if user already has access
-        has_access, _ = drive_service.check_access(
-            request["folder_id"], 
-            request["user_email"]
-        )
-        
-        if not has_access:
-            # Grant access with reader role
-            drive_service.grant_access(
-                request["folder_id"],
-                request["user_email"],
-                role="reader"  # Default to reader role
+        request = await db.db.drive_access_requests.find_one({"_id": ObjectId(request_id)})
+        if not request:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Access request not found"
             )
         
-        success = True
+        # Check if the request is already processed
+        if request["status"] != "pending":
+            return {
+                "status": "warning",
+                "message": f"This request has already been {request['status']}",
+                "request": {
+                    "id": request_id,
+                    "status": request["status"],
+                    "decision_time": request.get("decision_time"),
+                    "decision_by": request.get("decision_by"),
+                    "reason": request.get("reason")
+                }
+            }
+        
+        # Update the request status in the database
+        now = datetime.utcnow()
+        update_result = await db.db.drive_access_requests.update_one(
+            {"_id": ObjectId(request_id)},
+            {"$set": {
+                "status": "approved",
+                "decision_time": now,
+                "decision_by": str(current_user.id),
+                "decision_by_email": current_user.email,
+                "reason": reason_text
+            }}
+        )
+        
+        if update_result.modified_count == 0:
+            logger.warning(f"No documents were updated for request {request_id}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update request status"
+            )
+        
+        # Grant actual access in Google Drive
+        drive_access_granted = False
+        drive_error = None
+        
+        try:
+            drive_service = GoogleDriveService.get_instance()
+            
+            # Check if user already has access
+            has_access, _ = drive_service.check_access(
+                request["folder_id"], 
+                request["user_email"]
+            )
+            
+            if not has_access:
+                # Grant access with reader role
+                drive_service.grant_access(
+                    request["folder_id"],
+                    request["user_email"],
+                    role="reader"  # Default to reader role
+                )
+            
+            drive_access_granted = True
+        except Exception as e:
+            logger.error(f"Error granting Google Drive access: {str(e)}")
+            drive_error = str(e)
+        
+        # Get the updated request
+        updated_request = await db.db.drive_access_requests.find_one({"_id": ObjectId(request_id)})
+        updated_request["id"] = str(updated_request["_id"])
+        updated_request.pop("_id", None)
+        
+        response = {
+            "status": "success",
+            "message": f"Access request approved for {updated_request['user_email']}",
+            "request": updated_request,
+            "drive_access_granted": drive_access_granted
+        }
+        
+        if drive_error:
+            response["drive_error"] = drive_error
+        
+        return response
     except Exception as e:
-        logger.error(f"Error granting Google Drive access: {str(e)}")
-        error_message = str(e)
-        # We'll still return success since the request was approved
-        # But include the error in the response
-    
-    response = {
-        "status": "success",
-        "message": f"Access request approved for {updated_request['user_email']}",
-        "request": updated_request,
-        "drive_access_granted": success
-    }
-    
-    if error_message:
-        response["drive_error"] = error_message
-    
-    return response
+        logger.error(f"Error approving access request: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error approving access request: {str(e)}"
+        )
 
 @router.post("/requests/{request_id}/reject")
 async def reject_drive_access(
@@ -305,25 +368,67 @@ async def reject_drive_access(
     # Extract reason string if provided
     reason_text = reason.get("reason") if reason else None
     
-    # Update the request status
-    updated_request = await update_drive_access_request(
-        request_id=request_id,
-        status="rejected",
-        decision_by=str(current_user.id),
-        reason=reason_text
-    )
-    
-    if not updated_request:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Access request not found"
+    try:
+        # Get the request details first to verify it exists
+        request = await db.db.drive_access_requests.find_one({"_id": ObjectId(request_id)})
+        if not request:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Access request not found"
+            )
+        
+        # Check if the request is already processed
+        if request["status"] != "pending":
+            return {
+                "status": "warning",
+                "message": f"This request has already been {request['status']}",
+                "request": {
+                    "id": request_id,
+                    "status": request["status"],
+                    "decision_time": request.get("decision_time"),
+                    "decision_by": request.get("decision_by"),
+                    "reason": request.get("reason")
+                }
+            }
+        
+        # Update the request status
+        now = datetime.utcnow()
+        update_result = await db.db.drive_access_requests.update_one(
+            {"_id": ObjectId(request_id)},
+            {"$set": {
+                "status": "rejected",
+                "decision_time": now,
+                "decision_by": str(current_user.id),
+                "decision_by_email": current_user.email,
+                "reason": reason_text
+            }}
         )
-    
-    return {
-        "status": "success",
-        "message": f"Access request rejected for {updated_request['user_email']}",
-        "request": updated_request
-    }
+        
+        if update_result.modified_count == 0:
+            logger.warning(f"No documents were updated for request {request_id}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update request status"
+            )
+        
+        # Get the updated request
+        updated_request = await db.db.drive_access_requests.find_one({"_id": ObjectId(request_id)})
+        updated_request["id"] = str(updated_request["_id"])
+        updated_request.pop("_id", None)
+        
+        return {
+            "status": "success",
+            "message": f"Access request rejected for {updated_request['user_email']}",
+            "request": updated_request
+        }
+    except Exception as e:
+        logger.error(f"Error rejecting access request: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error rejecting access request: {str(e)}"
+        )
+
+# Updated sync_folders endpoint for google_drive_routes.py
 
 @router.post("/sync-folders")
 async def sync_google_drive_folders(
@@ -338,22 +443,161 @@ async def sync_google_drive_folders(
         )
     
     try:
+        # Get Google Drive service instance
         drive_service = GoogleDriveService.get_instance()
-        success = drive_service.sync_folder_mappings()
         
-        if success:
-            return {
-                "status": "success",
-                "message": "Google Drive folders synchronized successfully"
-            }
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to synchronize Google Drive folders"
-            )
+        # Get folders from Google Drive API
+        folders = drive_service.list_folders()
+        
+        # Create a list to track synced folders
+        synced_folders = []
+        
+        # Loop through each folder and update or create in database
+        for folder in folders:
+            folder_id = folder["id"]
+            folder_name = folder["name"]
+            
+            # Check if folder exists in DB
+            existing = await db.db.folder_mappings.find_one({"folder_id": folder_id})
+            
+            if existing:
+                # Update existing record
+                await db.db.folder_mappings.update_one(
+                    {"folder_id": folder_id},
+                    {"$set": {
+                        "name": folder_name,
+                        "last_sync": datetime.utcnow()
+                    }}
+                )
+                
+                logger.info(f"Updated existing folder: {folder_name} ({folder_id})")
+            else:
+                # Determine sensitivity based on folder name
+                sensitivity = "internal"  # Default sensitivity
+                folder_name_lower = folder_name.lower()
+                
+                # Simple name-based mapping
+                if "hr" in folder_name_lower or "human resources" in folder_name_lower:
+                    sensitivity = "confidential"
+                elif "finance" in folder_name_lower or "accounting" in folder_name_lower:
+                    sensitivity = "critical"  
+                elif "admin" in folder_name_lower or "it" in folder_name_lower or "security" in folder_name_lower:
+                    sensitivity = "admin"
+                
+                # Create new record
+                await db.db.folder_mappings.insert_one({
+                    "folder_id": folder_id,
+                    "name": folder_name,
+                    "sensitivity": sensitivity,
+                    "last_sync": datetime.utcnow()
+                })
+                
+                logger.info(f"Added new folder: {folder_name} ({folder_id}) with sensitivity: {sensitivity}")
+            
+            # Add to synced folders list
+            synced_folders.append({
+                "id": folder_id,
+                "name": folder_name
+            })
+        
+        logger.info(f"Successfully synchronized {len(synced_folders)} folders with database")
+        
+        return {
+            "status": "success",
+            "message": f"Synchronized {len(synced_folders)} folders with database",
+            "folders": synced_folders
+        }
     except Exception as e:
         logger.error(f"Error syncing Google Drive folders: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error syncing Google Drive folders: {str(e)}"
+        )
+        
+@router.get("/check-requests", response_model=dict)
+async def check_user_folder_requests(
+    current_user: Annotated[User, Depends(get_current_user)],
+    folder_id: str = Query(..., description="The Google Drive folder ID to check"),
+):
+    """Check if the current user has pending requests for a specific folder"""
+    try:
+        # Find any pending requests for this user and folder
+        request = await db.db.drive_access_requests.find_one({
+            "user_id": str(current_user.id),
+            "folder_id": folder_id
+        })
+        
+        if request:
+            return {
+                "has_request": True,
+                "status": request["status"],
+                "request_id": str(request["_id"]),
+                "request_time": request["request_time"],
+                "folder_name": request["folder_name"]
+            }
+        else:
+            return {
+                "has_request": False
+            }
+    except Exception as e:
+        logger.error(f"Error checking folder requests: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error checking folder requests: {str(e)}"
+        )
+
+@router.get("/folder/{folder_id}", response_model=dict)
+async def get_folder_details(
+    folder_id: str,
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """Get detailed information about a specific Google Drive folder"""
+    try:
+        # Check database for folder mapping
+        db_folder = await db.db.folder_mappings.find_one({"folder_id": folder_id})
+        
+        # Try to get real-time details from Google Drive
+        drive_service = GoogleDriveService.get_instance()
+        try:
+            folder_details = drive_service.get_folder_details(folder_id)
+            
+            # Enhance with data from our database
+            if db_folder:
+                folder_details["sensitivity"] = db_folder.get("sensitivity", "internal")
+            else:
+                folder_details["sensitivity"] = "internal"
+            
+            # Check if user has pending requests
+            pending_request = await db.db.drive_access_requests.find_one({
+                "user_id": str(current_user.id),
+                "folder_id": folder_id,
+                "status": "pending"
+            })
+            
+            folder_details["has_pending_request"] = pending_request is not None
+            
+            return folder_details
+        except Exception as e:
+            logger.error(f"Error getting folder details from Google Drive: {str(e)}")
+            
+            # Fall back to database folder
+            if db_folder:
+                return {
+                    "id": db_folder["folder_id"],
+                    "name": db_folder["name"],
+                    "sensitivity": db_folder["sensitivity"],
+                    "error": str(e),
+                    "data_source": "database",
+                    "has_pending_request": pending_request is not None
+                }
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Folder not found: {folder_id}"
+                )
+    except Exception as e:
+        logger.error(f"Error getting folder details: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting folder details: {str(e)}"
         )
