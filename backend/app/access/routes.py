@@ -182,6 +182,8 @@ async def request_google_drive_access(
     This evaluates the request based on Zero Trust principles and 
     also creates a pending access request for admin approval.
     """
+    from bson.objectid import ObjectId
+    
     logger.info(f"Processing new Google Drive access request from {current_user.email}")
     
     # Set timestamp if not provided
@@ -217,6 +219,7 @@ async def request_google_drive_access(
     
     # Create an access request record regardless of the decision
     try:
+        # Directly create the request document without using helper function
         request_data = {
             "user_id": str(current_user.id),
             "user_email": current_user.email,
@@ -231,7 +234,7 @@ async def request_google_drive_access(
             "reason": None
         }
         
-        # Проверим, существует ли уже запрос от этого пользователя на эту папку
+        # First check if a request already exists
         existing_request = await db.db.drive_access_requests.find_one({
             "user_id": str(current_user.id),
             "folder_id": folder_id,
@@ -242,21 +245,22 @@ async def request_google_drive_access(
             logger.info(f"Found existing request: {existing_request['_id']}")
             request_id = str(existing_request["_id"])
         else:
-            # Если запроса нет, создаем новый
+            # Insert the new request
             result = await db.db.drive_access_requests.insert_one(request_data)
             request_id = str(result.inserted_id)
-            logger.info(f"Created new access request: {request_id}")
-        
-        # Подтверждаем создание запроса, проверив его наличие
-        check_request = await db.db.drive_access_requests.find_one({"_id": ObjectId(request_id)})
-        if check_request:
-            logger.info(f"Successfully confirmed request exists: {request_id}")
-        else:
-            logger.error(f"Failed to find request after creation: {request_id}")
+            logger.info(f"Created new access request with ID: {request_id}")
             
+            # Verify the request was saved
+            check = await db.db.drive_access_requests.find_one({"_id": result.inserted_id})
+            if check:
+                logger.info(f"Successfully verified request exists with ID: {request_id}")
+            else:
+                logger.error(f"Failed to verify request after creation: {request_id}")
     except Exception as e:
         logger.error(f"Error creating access request: {str(e)}")
-        # В случае ошибки продолжаем, но записываем ошибку
+        # Log the full error traceback
+        import traceback
+        logger.error(traceback.format_exc())
     
     # Adjust the decision - we'll always return "pending" initially
     decision.access_granted = False

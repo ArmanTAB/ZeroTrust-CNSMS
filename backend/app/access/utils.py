@@ -337,6 +337,7 @@ async def generate_sample_alerts():
 import logging
 logger = logging.getLogger(__name__)
 
+# This function in backend/app/access/utils.py needs to be fixed
 async def create_drive_access_request(
     user_id: str,
     user_email: str,
@@ -346,7 +347,9 @@ async def create_drive_access_request(
     device_ip: Optional[str] = None
 ) -> dict:
     """Create a new Google Drive access request"""
-    # Отладочный вывод
+    # Import ObjectId at the top level if not already there
+    from bson.objectid import ObjectId
+    
     logger.info(f"Creating drive access request: User ID: {user_id}, Email: {user_email}, Folder: {folder_id}")
     
     # Check if there's already a pending request for this user and folder
@@ -377,21 +380,32 @@ async def create_drive_access_request(
         "reason": None
     }
     
-    # Проверим структуру коллекции
+    # Make sure the collection exists
     collections = await db.db.list_collection_names()
     if 'drive_access_requests' not in collections:
         logger.warning("Collection 'drive_access_requests' does not exist. Creating it now.")
-        # Для отладки проверим содержимое базы данных
-        logger.info(f"Available collections: {collections}")
+        await db.db.create_collection('drive_access_requests')
     
     try:
+        # Debug log to see what we're trying to insert
+        logger.info(f"Inserting request data: {request_data}")
+        
         result = await db.db.drive_access_requests.insert_one(request_data)
         request_data["id"] = str(result.inserted_id)
+        
+        # Debug log to verify insertion
         logger.info(f"Successfully created new access request with ID: {request_data['id']}")
+        
+        # Double-check that the document exists after insertion
+        check = await db.db.drive_access_requests.find_one({"_id": result.inserted_id})
+        if check:
+            logger.info("Successfully verified the document exists in the database")
+        else:
+            logger.error("Document not found after insertion! DB consistency issue detected.")
     except Exception as e:
         logger.error(f"Error inserting access request: {str(e)}")
-        # Аварийное создание словаря с идентификатором
-        request_data["id"] = "error_creating_" + str(hash(user_id + folder_id))
+        # Create a fallback ID in case of error
+        request_data["id"] = "error_" + str(hash(user_id + folder_id))
     
     return request_data
 
