@@ -39,11 +39,27 @@ class GoogleDriveService:
         """Initialize Google Drive service with credentials"""
         self.credentials = None
         self.service = None
-        self.credentials_file = credentials_file or os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
-            'credentials', 
-            'google-drive-credentials.json'
-        )
+        
+        # If a specific file path wasn't provided, use a reliable path finder
+        if credentials_file is None:
+            import os
+            
+            # Get the current file's directory
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            
+            # Navigate up to app directory
+            app_dir = os.path.dirname(current_dir)
+            
+            # Navigate up to backend directory
+            backend_dir = os.path.dirname(app_dir)
+            
+            # Create the proper path to credentials file
+            credentials_file = os.path.join(backend_dir, 'credentials', 'google-drive-credentials.json')
+        
+        self.credentials_file = credentials_file
+        logger.info(f"GoogleDriveService using credentials file: {self.credentials_file}")
+        logger.info(f"File exists: {os.path.exists(self.credentials_file)}")
+        
         self.authenticate()
         
     def authenticate(self):

@@ -246,7 +246,7 @@ async def list_drive_access_requests(
             detail=f"Error retrieving access requests: {str(e)}"
         )
 
-# Updated approve_drive_access function in google_drive_routes.py
+# In backend/app/access/google_drive_routes.py
 
 @router.post("/requests/{request_id}/approve")
 async def approve_drive_access(
@@ -310,15 +310,27 @@ async def approve_drive_access(
                 detail="Missing folder_id or user_email in request"
             )
         
-        # Step 4: Authenticate with Google Drive API directly (like in test script)
-        # Get credentials file path
-        credentials_file = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            'credentials',
-            'google-drive-credentials.json'
-        )
+        # Step 4: Fix the credentials path
+        import os
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
         
-        logger.info(f"Using credentials file: {credentials_file}")
+        # FIXED PATH: Find the backend directory by navigating up from the current file
+        # Get the current file's directory
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Navigate up to app directory
+        app_dir = os.path.dirname(current_dir)
+        
+        # Navigate up to backend directory
+        backend_dir = os.path.dirname(app_dir)
+        
+        # Create the proper path to credentials file
+        credentials_file = os.path.join(backend_dir, 'credentials', 'google-drive-credentials.json')
+        
+        # Log the path for debugging
+        logger.info(f"Credentials file path: {credentials_file}")
+        logger.info(f"File exists: {os.path.exists(credentials_file)}")
         
         # Create credentials
         credentials = service_account.Credentials.from_service_account_file(
@@ -331,7 +343,7 @@ async def approve_drive_access(
         logger.info(f"Authenticated as: {credentials.service_account_email}")
         logger.info(f"Granting access to folder {folder_id} for user {user_email}")
         
-        # Step 5: Create permission
+        # Create permission
         user_permission = {
             'type': 'user',
             'role': 'reader',
@@ -355,7 +367,7 @@ async def approve_drive_access(
             drive_error = str(e)
             # Note: We continue with the request approval even if Drive permission fails
         
-        # Step 6: Update the request in the database
+        # Step 5: Update the request in the database
         now = datetime.utcnow()
         update_result = await db.db.drive_access_requests.update_one(
             {"_id": ObjectId(request_id)},
