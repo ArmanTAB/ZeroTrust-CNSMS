@@ -19,10 +19,7 @@ logger = logging.getLogger(__name__)
 SCOPES = [
     'https://www.googleapis.com/auth/drive',
     'https://www.googleapis.com/auth/drive.file',
-    'https://www.googleapis.com/auth/drive.metadata',
-    'https://www.googleapis.com/auth/drive.appdata',
-    'https://www.googleapis.com/auth/drive.scripts',
-    'https://www.googleapis.com/auth/drive.apps.readonly'
+    'https://www.googleapis.com/auth/drive.metadata'
 ]
 
 class GoogleDriveService:
@@ -56,11 +53,10 @@ class GoogleDriveService:
                 self.credentials = service_account.Credentials.from_service_account_file(
                     self.credentials_file, scopes=SCOPES)
                 
-                # Build the service
-                if self.credentials:
-                    self.service = build('drive', 'v3', credentials=self.credentials)
-                    logger.info("Successfully authenticated with Google Drive")
-                    return True
+                # Build the service with correct cache_discovery=False parameter
+                self.service = build('drive', 'v3', credentials=self.credentials, cache_discovery=False)
+                logger.info(f"Successfully authenticated with Google Drive as {self.credentials.service_account_email}")
+                return True
             else:
                 logger.error(f"Credentials file not found: {self.credentials_file}")
         except Exception as e:
@@ -298,128 +294,113 @@ class GoogleDriveService:
             raise Exception(f"Failed to fetch pending share requests: {str(e)}")
         
     def grant_access(self, folder_id, user_email, role='reader'):
-        """Grant access to a folder for a user with detailed logging"""
+        """Grant access to a folder for a user"""
         if not self.service:
             logger.error("Not authenticated with Google Drive")
             raise Exception("Not authenticated with Google Drive")
-            
+        
+        # Ensure consistent format for user_email
+        user_email = user_email.strip().lower()
+        
         try:
-            logger.info(f"==== GRANTING ACCESS ====")
+            logger.info(f"=== GRANTING ACCESS ===")
+            logger.info(f"Service account: {self.credentials.service_account_email}")
             logger.info(f"Folder ID: {folder_id}")
             logger.info(f"User email: {user_email}")
             logger.info(f"Role: {role}")
-            logger.info(f"Service account email: {self.credentials.service_account_email}")
             
-            # First, log what scopes the service account is authenticated with
-            logger.info(f"Authorized scopes: {self.credentials.scopes}")
-            
-            # Check if the folder exists and who owns it
+            # First, check if the user already has this permission
             try:
-                folder_details = self.service.files().get(
+                permissions = self.service.permissions().list(
                     fileId=folder_id,
-                    fields="id,name,owners,permissions",
+                    fields='permissions(id,emailAddress,role,type)',
                     supportsAllDrives=True
                 ).execute()
                 
-                logger.info(f"Folder details: {folder_details}")
-                if 'owners' in folder_details:
-                    for owner in folder_details.get('owners', []):
-                        logger.info(f"Folder owned by: {owner.get('emailAddress', 'Unknown')}")
-            except Exception as get_error:
-                logger.error(f"Error getting folder details: {str(get_error)}")
-                raise Exception(f"Failed to access folder: {str(get_error)}")
-            
-            # Check if the permission already exists
-            has_access, existing_role = self.check_access(folder_id, user_email)
-            logger.info(f"User has existing access: {has_access}, role: {existing_role}")
-            
-            if has_access:
-                logger.info(f"User {user_email} already has {existing_role} access to folder {folder_id}")
+                logger.info(f"Current permissions: {json.dumps(permissions, default=str)}")
                 
-                # If they have a different role and we want to update it
-                if existing_role != role:
-                    # Get permission ID
-                    permissions = self.service.permissions().list(
-                        fileId=folder_id,
-                        fields="permissions(id, emailAddress, role)",
-                        supportsAllDrives=True
-                    ).execute()
-                    
-                    permission_id = None
-                    for perm in permissions.get('permissions', []):
-                        if perm.get('emailAddress') == user_email:
-                            permission_id = perm.get('id')
-                            break
-                    
-                    if permission_id:
-                        # Update the role
-                        logger.info(f"Updating permission {permission_id} from {existing_role} to {role}")
-                        try:
-                            update_result = self.service.permissions().update(
-                                fileId=folder_id,
-                                permissionId=permission_id,
-                                body={'role': role},
-                                fields='id, role',
-                                supportsAllDrives=True
-                            ).execute()
-                            logger.info(f"Update result: {update_result}")
-                        except Exception as update_error:
-                            logger.error(f"Error updating permission: {str(update_error)}")
-                            raise Exception(f"Failed to update permission: {str(update_error)}")
-                
-                return {"id": permission_id, "role": role, "status": "existing_updated"}
+                # Check if user already has access
+                for perm in permissions.get('permissions', []):
+                    if perm.get('emailAddress', '').lower() == user_email:
+                        logger.info(f"User {user_email} already has {perm.get('role')} access")
+                        
+                        # If role matches, no need to update
+                        if perm.get('role') == role:
+                            logger.info(f"User already has requested role ({role}), no changes needed")
+                            return perm
+                        
+                        # Update role if different
+                        logger.info(f"Updating permission from {perm.get('role')} to {role}")
+                        updated_perm = self.service.permissions().update(
+                            fileId=folder_id,
+                            permissionId=perm.get('id'),
+                            body={'role': role},
+                            supportsAllDrives=True
+                        ).execute()
+                        
+                        logger.info(f"Permission updated: {json.dumps(updated_perm, default=str)}")
+                        return updated_perm
+            except Exception as e:
+                logger.error(f"Error checking existing permissions: {str(e)}")
             
-            # Create new permission with detailed options
+            # Create new permission
             user_permission = {
                 'type': 'user',
                 'role': role,
                 'emailAddress': user_email
             }
             
-            # Log the actual API call we're about to make
-            logger.info(f"Creating new permission for {user_email} with role {role}")
-            logger.info(f"Permission request: {user_permission}")
+            logger.info(f"Creating permission: {json.dumps(user_permission, default=str)}")
             
             try:
-                # Try with different parameters to see what works
                 result = self.service.permissions().create(
                     fileId=folder_id,
                     body=user_permission,
-                    fields='id',
+                    fields='id,emailAddress,role',
                     sendNotificationEmail=True,
-                    supportsAllDrives=True,
-                    # Try with these additional parameters
-                    useDomainAdminAccess=True,
-                    transferOwnership=False
+                    supportsAllDrives=True
                 ).execute()
                 
-                logger.info(f"Permission create result: {result}")
+                logger.info(f"Permission created: {json.dumps(result, default=str)}")
                 return result
-            except Exception as create_error:
-                error_message = str(create_error)
+            except Exception as e:
+                error_message = str(e)
                 logger.error(f"Error creating permission: {error_message}")
                 
-                # Try alternative method if specific errors occur
+                # Try fallback method without supportsAllDrives
                 if "insufficientFilePermissions" in error_message:
-                    logger.warning("Trying alternative permission method...")
+                    logger.info("Trying alternative permission method without supportsAllDrives...")
                     try:
-                        # Try without supportsAllDrives
                         alt_result = self.service.permissions().create(
                             fileId=folder_id,
                             body=user_permission,
                             fields='id',
                             sendNotificationEmail=True
                         ).execute()
-                        logger.info(f"Alternative permission method succeeded: {alt_result}")
+                        
+                        logger.info(f"Alternative method succeeded: {json.dumps(alt_result, default=str)}")
                         return alt_result
-                    except Exception as alt_error:
-                        logger.error(f"Alternative method also failed: {str(alt_error)}")
+                    except Exception as alt_e:
+                        logger.error(f"Alternative method also failed: {str(alt_e)}")
+                
+                # Try one more fallback using a different approach
+                try:
+                    logger.info("Trying final fallback method...")
+                    final_result = self.service.permissions().create(
+                        fileId=folder_id,
+                        body=user_permission,
+                        sendNotificationEmail=False,
+                    ).execute()
+                    
+                    logger.info(f"Final fallback succeeded: {json.dumps(final_result, default=str)}")
+                    return final_result
+                except Exception as final_e:
+                    logger.error(f"Final fallback method also failed: {str(final_e)}")
                 
                 raise Exception(f"Failed to grant access: {error_message}")
         except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Error granting access: {error_msg}")
-            raise Exception(f"Failed to grant access: {error_msg}")
+            logger.error(f"Error in grant_access: {str(e)}")
+            raise e
             
     def check_access(self, folder_id, user_email):
         """Check if a user has access to a specific folder"""

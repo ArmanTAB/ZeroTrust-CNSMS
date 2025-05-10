@@ -155,78 +155,38 @@ class GmailService:
             raise Exception("Not authenticated with Gmail")
             
         try:
-            # Log detailed parameters
-            logger.info(f"Responding to share request - Message ID: {message_id}")
-            logger.info(f"Approval status: {approved}")
+            logger.info(f"=== RESPONDING TO GMAIL SHARE REQUEST ===")
+            logger.info(f"Message ID: {message_id}")
+            logger.info(f"Approved: {approved}")
             logger.info(f"User email: {user_email}")
             logger.info(f"Folder ID: {folder_id}")
             
-            # 1. Mark the message as read
-            mark_result = self.mark_message_read(message_id)
-            logger.info(f"Mark message read result: {mark_result}")
+            # 1. First mark the message as read (to remove from pending)
+            self.mark_message_read(message_id)
+            logger.info(f"Message {message_id} marked as read")
             
             result = {
                 "status": "success",
                 "message_marked_read": True
             }
             
-            # 2. If approved, use Drive API to grant access
+            # 2. If approved, grant access in Google Drive
             if approved and user_email and folder_id:
                 try:
+                    logger.info(f"Granting Drive access to {user_email} for folder {folder_id}")
+                    
                     from .google_drive import GoogleDriveService
                     drive_service = GoogleDriveService.get_instance()
+                    permission_result = drive_service.grant_access(folder_id, user_email, "reader")
                     
-                    # Log Drive service availability
-                    logger.info(f"Drive service initialized: {drive_service is not None}")
-                    
-                    # Check if the folder exists and is accessible by the service account
-                    try:
-                        folder_info = drive_service.service.files().get(
-                            fileId=folder_id, 
-                            fields="id,name,owners,permissions",
-                            supportsAllDrives=True
-                        ).execute()
-                        logger.info(f"Successfully retrieved folder info: {folder_info}")
-                    except Exception as folder_error:
-                        logger.error(f"Error accessing folder: {str(folder_error)}")
-                        result["folder_access_error"] = str(folder_error)
-                    
-                    # Check if the service account has permission to modify the folder
-                    try:
-                        permissions = drive_service.service.permissions().list(
-                            fileId=folder_id,
-                            fields="permissions(id,emailAddress,role,type)",
-                            supportsAllDrives=True
-                        ).execute()
-                        logger.info(f"Current permissions on folder: {permissions}")
-                        
-                        # Check service account permissions
-                        service_email = drive_service.credentials.service_account_email
-                        has_permission = False
-                        for perm in permissions.get('permissions', []):
-                            if perm.get('emailAddress') == service_email:
-                                logger.info(f"Service account has {perm.get('role')} permission")
-                                has_permission = perm.get('role') in ['owner', 'organizer', 'fileOrganizer', 'writer']
-                        
-                        logger.info(f"Service account has modification permission: {has_permission}")
-                    except Exception as perm_error:
-                        logger.error(f"Error checking permissions: {str(perm_error)}")
-                        result["permission_check_error"] = str(perm_error)
-                    
-                    # Grant access in Google Drive with detailed parameters
-                    permission_result = drive_service.grant_access(
-                        folder_id, 
-                        user_email,
-                        role="reader"
-                    )
-                    logger.info(f"Drive API permission result: {permission_result}")
+                    logger.info(f"Permission result: {json.dumps(permission_result, default=str)}")
                     
                     result["drive_access_granted"] = True
-                    result["permission_details"] = permission_result
-                except Exception as drive_error:
-                    logger.error(f"Drive error details: {str(drive_error)}")
+                    result["permission_result"] = permission_result
+                except Exception as e:
+                    logger.error(f"Error granting Drive access: {str(e)}")
                     result["drive_access_granted"] = False
-                    result["drive_error"] = str(drive_error)
+                    result["drive_error"] = str(e)
             
             return result
         except Exception as e:
