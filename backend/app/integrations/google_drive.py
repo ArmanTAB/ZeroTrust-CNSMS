@@ -19,7 +19,9 @@ logger = logging.getLogger(__name__)
 SCOPES = [
     'https://www.googleapis.com/auth/drive.metadata.readonly',
     'https://www.googleapis.com/auth/drive.file',
-    'https://www.googleapis.com/auth/drive'  # Added full drive scope for managing permissions
+    'https://www.googleapis.com/auth/drive', 
+    'https://www.googleapis.com/auth/drive.activity', 
+    'https://www.googleapis.com/auth/admin.directory.user'  
 ]
 
 class GoogleDriveService:
@@ -302,3 +304,64 @@ class GoogleDriveService:
         # Since we can't use async functionality here, we'll return an empty list 
         # and let the route handler do the async database query
         return pending_requests
+    
+    def get_pending_share_requests(self):
+        """Fetch pending share requests from Google Drive"""
+        if not self.service:
+            logger.error("Not authenticated with Google Drive")
+            raise Exception("Not authenticated with Google Drive")
+            
+        try:
+            # Use the Drive Activity API
+            activity_service = build('driveactivity', 'v2', credentials=self.credentials)
+            
+            # Query for all pending access requests
+            results = activity_service.activity().query(
+                body={
+                    "ancestorName": "root",  # Start from root to get all
+                    "filter": "time >= 1970-01-01T00:00:00Z AND detail.permissionChange.addedPermissions.role = reader",
+                    "pageSize": 100
+                }
+            ).execute()
+            
+            activities = results.get('activities', [])
+            
+            # Filter for pending access requests
+            pending_requests = []
+            for activity in activities:
+                if 'permissionChange' in activity.get('primaryActionDetail', {}):
+                    change = activity['primaryActionDetail']['permissionChange']
+                    # Check if this is a permission request rather than a direct add
+                    if 'pendingAccessRequest' in str(change):
+                        # Extract request details
+                        actors = activity.get('actors', [])
+                        targets = activity.get('targets', [])
+                        
+                        # Get user who requested access
+                        request_user = None
+                        for actor in actors:
+                            if 'user' in actor:
+                                request_user = actor['user'].get('knownUser', {}).get('personName', 'Unknown User')
+                        
+                        # Get file/folder that access was requested for
+                        request_target = None
+                        for target in targets:
+                            if 'driveItem' in target:
+                                request_target = target['driveItem'].get('name', 'Unknown Item')
+                        
+                        timestamp = activity.get('timestamp', '')
+                        
+                        if request_user and request_target:
+                            pending_requests.append({
+                                'user': request_user,
+                                'target': request_target,
+                                'timestamp': timestamp,
+                                'activity_id': activity.get('id', '')
+                            })
+            
+            logger.info(f"Found {len(pending_requests)} pending share requests")
+            return pending_requests
+        
+        except Exception as e:
+            logger.error(f"Error fetching pending share requests: {str(e)}")
+            raise Exception(f"Failed to fetch pending share requests: {str(e)}")

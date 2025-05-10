@@ -307,27 +307,58 @@ async def approve_drive_access(
         drive_access_granted = False
         drive_error = None
         
-        try:
-            drive_service = GoogleDriveService.get_instance()
-            
-            # Check if user already has access
-            has_access, _ = drive_service.check_access(
-                request["folder_id"], 
-                request["user_email"]
-            )
-            
-            if not has_access:
+        # If the request came from Google Drive, respond to it
+        if request.get("source") in ["drive_api", "gmail"] and request.get("external_id"):
+            try:
+                # Use the Drive API to grant access
+                drive_service = GoogleDriveService.get_instance()
+                
                 # Grant access with reader role
                 drive_service.grant_access(
                     request["folder_id"],
                     request["user_email"],
                     role="reader"  # Default to reader role
                 )
-            
-            drive_access_granted = True
-        except Exception as e:
-            logger.error(f"Error granting Google Drive access: {str(e)}")
-            drive_error = str(e)
+                
+                # If it came from Gmail, mark the message as read
+                if request.get("source") == "gmail" and request.get("external_id"):
+                    try:
+                        from ..integrations.gmail_service import GmailService
+                        gmail_service = GmailService.get_instance()
+                        gmail_service.mark_message_read(request["external_id"])
+                    except Exception as e:
+                        logger.error(f"Error marking Gmail message as read: {str(e)}")
+                        # Continue anyway - this is not critical
+                
+                drive_access_granted = True
+                logger.info(f"Successfully granted Drive access for request {request_id}")
+            except Exception as e:
+                logger.error(f"Error responding to Google Drive share request: {str(e)}")
+                drive_error = str(e)
+                drive_access_granted = False
+        else:
+            # For internal requests, use standard grant procedure
+            try:
+                drive_service = GoogleDriveService.get_instance()
+                
+                # Check if user already has access
+                has_access, _ = drive_service.check_access(
+                    request["folder_id"], 
+                    request["user_email"]
+                )
+                
+                if not has_access:
+                    # Grant access with reader role
+                    drive_service.grant_access(
+                        request["folder_id"],
+                        request["user_email"],
+                        role="reader"  # Default to reader role
+                    )
+                
+                drive_access_granted = True
+            except Exception as e:
+                logger.error(f"Error granting Google Drive access: {str(e)}")
+                drive_error = str(e)
         
         # Get the updated request
         updated_request = await db.db.drive_access_requests.find_one({"_id": ObjectId(request_id)})
@@ -656,3 +687,123 @@ async def get_access_requests_summary(
             detail=f"Error getting access requests summary: {str(e)}"
         )
     
+@router.get("/sync-share-requests", response_model=dict)
+async def sync_google_drive_share_requests(
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """Sync Google Drive share requests with our system"""
+    # Check if user has admin privileges
+    if current_user.role not in ["admin", "security_analyst"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to sync share requests"
+        )
+    
+    try:
+        # Method 1: Try to get requests via Drive API
+        drive_service = GoogleDriveService.get_instance()
+        drive_requests = []
+        
+        try:
+            drive_requests = drive_service.get_pending_share_requests()
+        except Exception as e:
+            logger.error(f"Error getting share requests via Drive API: {str(e)}")
+        
+        # Method 2: Get share requests via Gmail
+        gmail_requests = []
+        try:
+            from ..integrations.gmail_service import GmailService
+            gmail_service = GmailService.get_instance()
+            gmail_requests = gmail_service.get_drive_share_requests()
+        except Exception as e:
+            logger.error(f"Error getting share requests via Gmail: {str(e)}")
+        
+        # Combine and de-duplicate requests
+        all_requests = []
+        processed_folders = set()
+        
+        # Process Drive API requests
+        for req in drive_requests:
+            folder_id = req.get('target', {}).get('id')
+            if folder_id and folder_id not in processed_folders:
+                processed_folders.add(folder_id)
+                all_requests.append({
+                    'source': 'drive_api',
+                    'folder_id': folder_id,
+                    'folder_name': req.get('target', {}).get('name', 'Unknown'),
+                    'requester': req.get('user', {}).get('emailAddress', 'Unknown'),
+                    'timestamp': req.get('timestamp'),
+                    'request_id': req.get('activity_id')
+                })
+        
+        # Process Gmail requests
+        for req in gmail_requests:
+            folder_name = req.get('folder_name')
+            requester = req.get('requester')
+            
+            # Try to find the folder in our mapping
+            folder = await db.db.folder_mappings.find_one({"name": folder_name})
+            folder_id = folder.get('folder_id') if folder else None
+            
+            if folder_id and folder_id not in processed_folders:
+                processed_folders.add(folder_id)
+                all_requests.append({
+                    'source': 'gmail',
+                    'folder_id': folder_id,
+                    'folder_name': folder_name,
+                    'requester': requester,
+                    'timestamp': req.get('date'),
+                    'message_id': req.get('message_id')
+                })
+        
+        # Create access requests in our system for each share request
+        created_count = 0
+        for req in all_requests:
+            # Skip if we can't identify the folder or requester
+            if not req.get('folder_id') or not req.get('requester'):
+                continue
+                
+            # Try to find user by email
+            user_email = req.get('requester')
+            user = await db.db.users.find_one({"email": user_email})
+            user_id = str(user["_id"]) if user else None
+            
+            # Check if request already exists
+            existing_request = await db.db.drive_access_requests.find_one({
+                "folder_id": req.get('folder_id'),
+                "user_email": user_email,
+                "status": "pending"
+            })
+            
+            if not existing_request:
+                # Create new request
+                request_data = {
+                    "user_id": user_id,
+                    "user_email": user_email,
+                    "folder_id": req.get('folder_id'),
+                    "folder_name": req.get('folder_name'),
+                    "request_time": datetime.utcnow(),
+                    "status": "pending",
+                    "source": req.get('source'),
+                    "external_id": req.get('request_id') or req.get('message_id'),
+                    "decision_time": None,
+                    "decision_by": None,
+                    "reason": None
+                }
+                
+                await db.db.drive_access_requests.insert_one(request_data)
+                created_count += 1
+        
+        return {
+            "status": "success",
+            "message": f"Synced {len(all_requests)} share requests, created {created_count} new requests",
+            "total_found": len(all_requests),
+            "new_created": created_count
+        }
+        
+    except Exception as e:
+        logger.error(f"Error syncing Google Drive share requests: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error syncing share requests: {str(e)}"
+        )

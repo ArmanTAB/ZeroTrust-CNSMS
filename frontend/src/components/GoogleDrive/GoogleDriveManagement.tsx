@@ -30,6 +30,8 @@ interface AccessRequest {
   decision_by?: string;
   decision_by_email?: string;
   reason?: string;
+  source?: string; // Added to track source of request
+  external_id?: string; // Added to track external ID
 }
 
 interface FilterState {
@@ -58,6 +60,7 @@ const GoogleDriveManagement: React.FC = () => {
     status: "", // Changed from "pending" to empty string for "All"
   });
   const [syncingFolders, setSyncingFolders] = useState<boolean>(false);
+  const [syncingShares, setSyncingShares] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const isAdmin = user?.role === "admin" || user?.role === "security_analyst";
@@ -148,6 +151,29 @@ const GoogleDriveManagement: React.FC = () => {
     setTimeout(() => {
       fetchAccessRequests("");
     }, 0);
+  };
+
+  const handleSyncShareRequests = async (): Promise<void> => {
+    if (!isAdmin) return;
+
+    setSyncingShares(true);
+    try {
+      const result = await AccessApi.syncGoogleDriveShareRequests();
+      showToast(
+        `Successfully synced ${result.total_found} share requests (${result.new_created} new)`,
+        "success"
+      );
+
+      // Refresh access requests
+      if (activeTab === "requests") {
+        await fetchAccessRequests();
+      }
+    } catch (err: any) {
+      console.error("Error syncing share requests:", err);
+      showToast(err.message || "Error syncing share requests", "error");
+    } finally {
+      setSyncingShares(false);
+    }
   };
 
   const handleRequestAccess = async (
@@ -619,8 +645,48 @@ const GoogleDriveManagement: React.FC = () => {
 
   const renderAccessRequests = (): JSX.Element => (
     <>
-      {renderRequestsFilter()}
+      {/* Add the sync buttons at the top of the requests tab too */}
+      {isAdmin && (
+        <div className="mb-4 flex space-x-4">
+          <button
+            className={`px-4 py-2 rounded-md ${
+              syncingFolders
+                ? "bg-gray-400 cursor-wait"
+                : "bg-blue-600 hover:bg-blue-700 text-white"
+            }`}
+            onClick={handleSyncGoogleDriveFolders}
+            disabled={syncingFolders}
+          >
+            {syncingFolders
+              ? "Syncing Folders..."
+              : "Sync Google Drive Folders"}
+          </button>
 
+          <button
+            className={`px-4 py-2 rounded-md ${
+              syncingShares
+                ? "bg-gray-400 cursor-wait"
+                : "bg-green-600 hover:bg-green-700 text-white"
+            }`}
+            onClick={handleSyncShareRequests}
+            disabled={syncingShares}
+          >
+            {syncingShares
+              ? "Syncing Share Requests..."
+              : "Sync Share Requests"}
+          </button>
+
+          <button
+            className="px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300 text-gray-800"
+            onClick={handleRefreshRequests}
+            disabled={loading}
+          >
+            {loading ? "Loading..." : "Refresh"}
+          </button>
+        </div>
+      )}
+
+      {renderRequestsFilter()}
       {renderErrorMessage()}
 
       <div className="bg-white shadow-md rounded-lg overflow-hidden">
@@ -640,12 +706,21 @@ const GoogleDriveManagement: React.FC = () => {
               />
             </svg>
             <p className="mt-2 text-gray-500">No access requests found</p>
-            <button
-              onClick={handleRefreshRequests}
-              className="mt-4 px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              Refresh Requests
-            </button>
+            <div className="mt-4 flex justify-center space-x-4">
+              <button
+                onClick={handleSyncShareRequests}
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded-md hover:bg-green-700"
+                disabled={syncingShares}
+              >
+                {syncingShares ? "Syncing..." : "Sync Share Requests"}
+              </button>
+              <button
+                onClick={handleRefreshRequests}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Refresh Requests
+              </button>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -675,6 +750,13 @@ const GoogleDriveManagement: React.FC = () => {
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                   >
                     Status
+                  </th>
+                  {/* Add new column for source */}
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Source
                   </th>
                   <th
                     scope="col"
@@ -723,6 +805,16 @@ const GoogleDriveManagement: React.FC = () => {
                         )}`}
                       >
                         {request.status}
+                      </span>
+                    </td>
+                    {/* New column displaying the source */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                        {request.source === "drive_api"
+                          ? "Google Drive"
+                          : request.source === "gmail"
+                          ? "Email"
+                          : request.source || "Internal"}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">

@@ -74,7 +74,7 @@ class AccessRequestStatus(str, Enum):
 
 class DriveAccessRequest(BaseModel):
     id: Optional[str] = None
-    user_id: str
+    user_id: Optional[str] = None  
     user_email: str
     folder_id: str
     folder_name: str
@@ -85,3 +85,5 @@ class DriveAccessRequest(BaseModel):
     decision_time: Optional[datetime] = None
     decision_by: Optional[str] = None
     reason: Optional[str] = None
+    source: Optional[str] = None  # 'drive_api', 'gmail', or 'internal'
+    external_id: Optional[str] = None  # ID from external system
