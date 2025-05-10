@@ -262,6 +262,21 @@ const AccessApi = {
       throw error;
     }
   },
+
+  /**
+   * Sync Google Drive share requests from Gmail
+   */
+  syncGmailShareRequests: async (): Promise<any> => {
+    try {
+      const response = await api.post<any>(
+        "/access/google-drive/sync-gmail-requests"
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error syncing Gmail share requests:", error);
+      throw error;
+    }
+  },
 };
 
 export default AccessApi;

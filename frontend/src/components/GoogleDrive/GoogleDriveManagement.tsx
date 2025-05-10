@@ -61,6 +61,7 @@ const GoogleDriveManagement: React.FC = () => {
   });
   const [syncingFolders, setSyncingFolders] = useState<boolean>(false);
   const [syncingShares, setSyncingShares] = useState<boolean>(false);
+  const [syncingGmail, setSyncingGmail] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const isAdmin = user?.role === "admin" || user?.role === "security_analyst";
@@ -151,6 +152,29 @@ const GoogleDriveManagement: React.FC = () => {
     setTimeout(() => {
       fetchAccessRequests("");
     }, 0);
+  };
+
+  const handleSyncGmailRequests = async (): Promise<void> => {
+    if (!isAdmin) return;
+
+    setSyncingGmail(true);
+    try {
+      const result = await AccessApi.syncGmailShareRequests();
+      showToast(
+        `Successfully synced ${result.total_found} Gmail requests (${result.new_created} new)`,
+        "success"
+      );
+
+      // Refresh access requests
+      if (activeTab === "requests") {
+        await fetchAccessRequests();
+      }
+    } catch (err: any) {
+      console.error("Error syncing Gmail requests:", err);
+      showToast(err.message || "Error syncing Gmail requests", "error");
+    } finally {
+      setSyncingGmail(false);
+    }
   };
 
   const handleSyncShareRequests = async (): Promise<void> => {
@@ -675,7 +699,17 @@ const GoogleDriveManagement: React.FC = () => {
               ? "Syncing Share Requests..."
               : "Sync Share Requests"}
           </button>
-
+          <button
+            className={`px-4 py-2 rounded-md ${
+              syncingGmail
+                ? "bg-gray-400 cursor-wait"
+                : "bg-purple-600 hover:bg-purple-700 text-white"
+            }`}
+            onClick={handleSyncGmailRequests}
+            disabled={syncingGmail}
+          >
+            {syncingGmail ? "Syncing Gmail..." : "Sync Gmail"}
+          </button>
           <button
             className="px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300 text-gray-800"
             onClick={handleRefreshRequests}
@@ -719,6 +753,17 @@ const GoogleDriveManagement: React.FC = () => {
                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
               >
                 Refresh Requests
+              </button>
+              <button
+                className={`px-4 py-2 rounded-md ${
+                  syncingGmail
+                    ? "bg-gray-400 cursor-wait"
+                    : "bg-purple-600 hover:bg-purple-700 text-white"
+                }`}
+                onClick={handleSyncGmailRequests}
+                disabled={syncingGmail}
+              >
+                {syncingGmail ? "Syncing Gmail..." : "Sync Gmail"}
               </button>
             </div>
           </div>

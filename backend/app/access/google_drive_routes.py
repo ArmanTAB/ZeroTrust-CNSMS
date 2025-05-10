@@ -807,3 +807,41 @@ async def sync_google_drive_share_requests(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error syncing share requests: {str(e)}"
         )
+        
+@router.post("/sync-gmail-requests", response_model=dict)
+async def sync_gmail_share_requests(
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """Sync Google Drive share requests from Gmail"""
+    # Check if user has admin privileges
+    if current_user.role not in ["admin", "security_analyst"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to sync share requests"
+        )
+    
+    try:
+        logger.info("Starting Gmail share request sync...")
+        from ..tasks.sync_gmail import sync_gmail_share_requests as sync_func
+        result = await sync_func()
+        
+        if result["status"] == "success":
+            logger.info(f"Gmail sync completed successfully: {result}")
+            return {
+                "status": "success",
+                "message": f"Synced {result['total_found']} Gmail requests, created {result['new_created']} new requests",
+                "total_found": result["total_found"],
+                "new_created": result["new_created"]
+            }
+        else:
+            logger.error(f"Gmail sync failed: {result}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result["message"]
+            )
+    except Exception as e:
+        logger.error(f"Error syncing Gmail share requests: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error syncing Gmail share requests: {str(e)}"
+        )
