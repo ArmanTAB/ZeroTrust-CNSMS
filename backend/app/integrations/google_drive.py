@@ -17,11 +17,12 @@ logger = logging.getLogger(__name__)
 
 # Define scopes needed for Drive access
 SCOPES = [
-    'https://www.googleapis.com/auth/drive.metadata.readonly',
+    'https://www.googleapis.com/auth/drive',
     'https://www.googleapis.com/auth/drive.file',
-    'https://www.googleapis.com/auth/drive', 
-    'https://www.googleapis.com/auth/drive.activity', 
-    'https://www.googleapis.com/auth/admin.directory.user'  
+    'https://www.googleapis.com/auth/drive.metadata',
+    'https://www.googleapis.com/auth/drive.appdata',
+    'https://www.googleapis.com/auth/drive.scripts',
+    'https://www.googleapis.com/auth/drive.apps.readonly'
 ]
 
 class GoogleDriveService:
@@ -150,76 +151,6 @@ class GoogleDriveService:
         except HttpError as e:
             logger.error(f"Error checking access: {str(e)}")
             return False, str(e)
-    
-    def grant_access(self, folder_id, user_email, role='reader'):
-        """Grant access to a folder for a user"""
-        if not self.service:
-            logger.error("Not authenticated with Google Drive")
-            raise Exception("Not authenticated with Google Drive")
-            
-        try:
-            logger.info(f"Granting {role} access to {user_email} for folder {folder_id}")
-            
-            # Check if the permission already exists
-            has_access, existing_role = self.check_access(folder_id, user_email)
-            
-            if has_access:
-                logger.info(f"User {user_email} already has {existing_role} access to folder {folder_id}")
-                
-                # If they have a different role and we want to update it
-                if existing_role != role:
-                    # Get permission ID
-                    permissions = self.service.permissions().list(
-                        fileId=folder_id,
-                        fields="permissions(id, emailAddress, role)",
-                        supportsAllDrives=True
-                    ).execute()
-                    
-                    permission_id = None
-                    for perm in permissions.get('permissions', []):
-                        if perm.get('emailAddress') == user_email:
-                            permission_id = perm.get('id')
-                            break
-                    
-                    if permission_id:
-                        # Update the role
-                        self.service.permissions().update(
-                            fileId=folder_id,
-                            permissionId=permission_id,
-                            body={'role': role},
-                            fields='id, role',
-                            supportsAllDrives=True
-                        ).execute()
-                        logger.info(f"Updated {user_email}'s role from {existing_role} to {role}")
-                
-                return {"id": permission_id, "role": role, "status": "existing_updated"}
-            
-            # Create new permission
-            user_permission = {
-                'type': 'user',
-                'role': role,
-                'emailAddress': user_email
-            }
-            
-            result = self.service.permissions().create(
-                fileId=folder_id,
-                body=user_permission,
-                fields='id',
-                sendNotificationEmail=True,
-                supportsAllDrives=True
-            ).execute()
-            
-            logger.info(f"Granted {role} access to {user_email} for folder {folder_id}, permission ID: {result.get('id')}")
-            return result
-        except HttpError as e:
-            error_msg = str(e)
-            logger.error(f"Error granting access: {error_msg}")
-            
-            # Handle specific error cases
-            if "insufficientFilePermissions" in error_msg:
-                raise Exception(f"The service account does not have permission to share this folder. Make sure the service account has edit access to the folder.")
-            else:
-                raise Exception(f"Failed to grant access: {error_msg}")
     
     def revoke_access(self, folder_id, user_email):
         """Revoke access to a folder for a user"""
@@ -367,16 +298,40 @@ class GoogleDriveService:
             raise Exception(f"Failed to fetch pending share requests: {str(e)}")
         
     def grant_access(self, folder_id, user_email, role='reader'):
-        """Grant access to a folder for a user"""
+        """Grant access to a folder for a user with detailed logging"""
         if not self.service:
             logger.error("Not authenticated with Google Drive")
             raise Exception("Not authenticated with Google Drive")
             
         try:
-            logger.info(f"Granting {role} access to {user_email} for folder {folder_id}")
+            logger.info(f"==== GRANTING ACCESS ====")
+            logger.info(f"Folder ID: {folder_id}")
+            logger.info(f"User email: {user_email}")
+            logger.info(f"Role: {role}")
+            logger.info(f"Service account email: {self.credentials.service_account_email}")
+            
+            # First, log what scopes the service account is authenticated with
+            logger.info(f"Authorized scopes: {self.credentials.scopes}")
+            
+            # Check if the folder exists and who owns it
+            try:
+                folder_details = self.service.files().get(
+                    fileId=folder_id,
+                    fields="id,name,owners,permissions",
+                    supportsAllDrives=True
+                ).execute()
+                
+                logger.info(f"Folder details: {folder_details}")
+                if 'owners' in folder_details:
+                    for owner in folder_details.get('owners', []):
+                        logger.info(f"Folder owned by: {owner.get('emailAddress', 'Unknown')}")
+            except Exception as get_error:
+                logger.error(f"Error getting folder details: {str(get_error)}")
+                raise Exception(f"Failed to access folder: {str(get_error)}")
             
             # Check if the permission already exists
             has_access, existing_role = self.check_access(folder_id, user_email)
+            logger.info(f"User has existing access: {has_access}, role: {existing_role}")
             
             if has_access:
                 logger.info(f"User {user_email} already has {existing_role} access to folder {folder_id}")
@@ -398,43 +353,73 @@ class GoogleDriveService:
                     
                     if permission_id:
                         # Update the role
-                        self.service.permissions().update(
-                            fileId=folder_id,
-                            permissionId=permission_id,
-                            body={'role': role},
-                            fields='id, role',
-                            supportsAllDrives=True
-                        ).execute()
-                        logger.info(f"Updated {user_email}'s role from {existing_role} to {role}")
+                        logger.info(f"Updating permission {permission_id} from {existing_role} to {role}")
+                        try:
+                            update_result = self.service.permissions().update(
+                                fileId=folder_id,
+                                permissionId=permission_id,
+                                body={'role': role},
+                                fields='id, role',
+                                supportsAllDrives=True
+                            ).execute()
+                            logger.info(f"Update result: {update_result}")
+                        except Exception as update_error:
+                            logger.error(f"Error updating permission: {str(update_error)}")
+                            raise Exception(f"Failed to update permission: {str(update_error)}")
                 
                 return {"id": permission_id, "role": role, "status": "existing_updated"}
             
-            # Create new permission
+            # Create new permission with detailed options
             user_permission = {
                 'type': 'user',
                 'role': role,
                 'emailAddress': user_email
             }
             
-            result = self.service.permissions().create(
-                fileId=folder_id,
-                body=user_permission,
-                fields='id',
-                sendNotificationEmail=True,
-                supportsAllDrives=True
-            ).execute()
+            # Log the actual API call we're about to make
+            logger.info(f"Creating new permission for {user_email} with role {role}")
+            logger.info(f"Permission request: {user_permission}")
             
-            logger.info(f"Granted {role} access to {user_email} for folder {folder_id}, permission ID: {result.get('id')}")
-            return result
+            try:
+                # Try with different parameters to see what works
+                result = self.service.permissions().create(
+                    fileId=folder_id,
+                    body=user_permission,
+                    fields='id',
+                    sendNotificationEmail=True,
+                    supportsAllDrives=True,
+                    # Try with these additional parameters
+                    useDomainAdminAccess=True,
+                    transferOwnership=False
+                ).execute()
+                
+                logger.info(f"Permission create result: {result}")
+                return result
+            except Exception as create_error:
+                error_message = str(create_error)
+                logger.error(f"Error creating permission: {error_message}")
+                
+                # Try alternative method if specific errors occur
+                if "insufficientFilePermissions" in error_message:
+                    logger.warning("Trying alternative permission method...")
+                    try:
+                        # Try without supportsAllDrives
+                        alt_result = self.service.permissions().create(
+                            fileId=folder_id,
+                            body=user_permission,
+                            fields='id',
+                            sendNotificationEmail=True
+                        ).execute()
+                        logger.info(f"Alternative permission method succeeded: {alt_result}")
+                        return alt_result
+                    except Exception as alt_error:
+                        logger.error(f"Alternative method also failed: {str(alt_error)}")
+                
+                raise Exception(f"Failed to grant access: {error_message}")
         except Exception as e:
             error_msg = str(e)
             logger.error(f"Error granting access: {error_msg}")
-            
-            # Handle specific error cases
-            if "insufficientFilePermissions" in error_msg:
-                raise Exception(f"The service account does not have permission to share this folder. Make sure the service account has edit access to the folder.")
-            else:
-                raise Exception(f"Failed to grant access: {error_msg}")
+            raise Exception(f"Failed to grant access: {error_msg}")
             
     def check_access(self, folder_id, user_email):
         """Check if a user has access to a specific folder"""

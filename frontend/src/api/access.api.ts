@@ -227,11 +227,16 @@ const AccessApi = {
     requestId: string,
     reason?: string
   ): Promise<any> => {
-    const response = await api.post<any>(
-      `/access/google-drive/requests/${requestId}/approve`,
-      reason ? { reason } : {}
-    );
-    return response.data;
+    try {
+      const response = await api.post<any>(
+        `/access/google-drive/requests/${requestId}/approve`,
+        reason ? { reason } : {}
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error approving access request:", error);
+      throw error; // Re-throw to let the component handle it
+    }
   },
 
   /**
@@ -241,11 +246,16 @@ const AccessApi = {
     requestId: string,
     reason?: string
   ): Promise<any> => {
-    const response = await api.post<any>(
-      `/access/google-drive/requests/${requestId}/reject`,
-      reason ? { reason } : {}
-    );
-    return response.data;
+    try {
+      const response = await api.post<any>(
+        `/access/google-drive/requests/${requestId}/reject`,
+        reason ? { reason } : {}
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error rejecting access request:", error);
+      throw error; // Re-throw to let the component handle it
+    }
   },
 
   /**

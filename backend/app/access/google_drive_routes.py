@@ -249,7 +249,11 @@ async def approve_drive_access(
     current_user: Annotated[User, Depends(get_current_user)],
     reason: Optional[dict] = Body(None)
 ):
-    """Approve a Google Drive access request and grant access in Google Drive"""
+    """Approve a Google Drive access request with enhanced logging and error handling"""
+    # Add start timestamp for performance tracking
+    start_time = datetime.utcnow()
+    logger.info(f"Starting approval process for request ID: {request_id}")
+    
     # Check if user has admin privileges
     if current_user.role not in ["admin", "security_analyst"]:
         raise HTTPException(
@@ -260,17 +264,22 @@ async def approve_drive_access(
     # Extract reason string if provided
     reason_text = reason.get("reason") if reason else None
     
-    # Get the request details
     try:
+        # Record request details before processing
         request = await db.db.drive_access_requests.find_one({"_id": ObjectId(request_id)})
         if not request:
+            logger.error(f"Request {request_id} not found in database")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Access request not found"
             )
         
+        # Log full request details
+        logger.info(f"Processing request: {request}")
+        
         # Check if the request is already processed
         if request["status"] != "pending":
+            logger.warning(f"Request {request_id} has already been {request['status']}")
             return {
                 "status": "warning",
                 "message": f"This request has already been {request['status']}",
@@ -283,57 +292,8 @@ async def approve_drive_access(
                 }
             }
         
-        # Get the Google Drive service
-        drive_service = GoogleDriveService.get_instance()
-        
-        # Check if this is a placeholder folder
-        is_placeholder = request["folder_id"].startswith("placeholder_")
-        
-        # If it's a placeholder, try to find the real folder
-        if is_placeholder:
-            logger.warning(f"Request uses placeholder folder ID: {request['folder_id']}")
-            
-            # Try to find the real folder in Google Drive
-            real_folder = drive_service.find_folder_by_name(request["folder_name"])
-            
-            if real_folder:
-                # Update the folder ID in the request and in the folder mappings
-                real_folder_id = real_folder["id"]
-                logger.info(f"Found real Google Drive folder ID: {real_folder_id}")
-                
-                # Update the request to use the real folder ID
-                await db.db.drive_access_requests.update_one(
-                    {"_id": ObjectId(request_id)},
-                    {"$set": {"folder_id": real_folder_id, "is_placeholder": False}}
-                )
-                
-                # Also update the folder mapping
-                await db.db.folder_mappings.update_one(
-                    {"folder_id": request["folder_id"]},
-                    {"$set": {
-                        "folder_id": real_folder_id,
-                        "is_placeholder": False,
-                        "last_sync": datetime.utcnow()
-                    }}
-                )
-                
-                # Update our local copy of the request
-                request["folder_id"] = real_folder_id
-                request["is_placeholder"] = False
-                
-                logger.info(f"Updated placeholder to real folder ID: {real_folder_id}")
-            else:
-                # Still no real folder found, can't grant access
-                return {
-                    "status": "error",
-                    "message": f"Cannot approve request: Folder '{request['folder_name']}' not found in Google Drive",
-                    "request": {
-                        "id": request_id,
-                        "status": "pending"
-                    }
-                }
-        
-        # Update the request status in the database
+        # Update the request status in the database first
+        logger.info(f"Updating request status to approved in database")
         now = datetime.utcnow()
         update_result = await db.db.drive_access_requests.update_one(
             {"_id": ObjectId(request_id)},
@@ -348,74 +308,97 @@ async def approve_drive_access(
         
         if update_result.modified_count == 0:
             logger.warning(f"No documents were updated for request {request_id}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to update request status"
-            )
+        else:
+            logger.info(f"Successfully updated request in database")
         
-        # Grant actual access in Google Drive
+        # Grant actual access in Google Drive with detailed error trapping
         drive_access_granted = False
         drive_error = None
+        drive_response = None
         
         try:
-            # Log details for debugging
-            logger.info(f"Granting access to folder ID: {request['folder_id']}")
-            logger.info(f"User email: {request['user_email']}")
+            logger.info(f"Starting Drive permission granting process")
             
-            # Check if user already has access
-            has_access, existing_role = drive_service.check_access(
-                request["folder_id"], 
-                request["user_email"]
-            )
-            
-            if has_access:
-                logger.info(f"User {request['user_email']} already has {existing_role} access")
-                drive_access_granted = True
-            else:
-                # Grant access with reader role
-                result = drive_service.grant_access(
-                    request["folder_id"],
-                    request["user_email"],
-                    role="reader"  # Default to reader role
+            # Based on source, take appropriate action
+            if request.get("source") == "gmail" and request.get("external_id"):
+                logger.info(f"Request from Gmail with message ID: {request['external_id']}")
+                from ..integrations.gmail_service import GmailService
+                gmail_service = GmailService.get_instance()
+                
+                # Use the combined Gmail+Drive method to approve the request
+                logger.info(f"Using Gmail service to respond to share request")
+                gmail_result = await gmail_service.respond_to_share_request(
+                    message_id=request["external_id"],
+                    approved=True,
+                    user_email=request["user_email"],
+                    folder_id=request["folder_id"]
                 )
                 
-                logger.info(f"Access grant result: {result}")
-                drive_access_granted = True
-            
-            # If it came from Gmail, mark the message as read
-            if request.get("source") == "gmail" and request.get("external_id"):
-                try:
-                    from ..integrations.gmail_service import GmailService
-                    gmail_service = GmailService.get_instance()
-                    gmail_service.mark_message_read(request["external_id"])
-                    logger.info(f"Marked Gmail message {request['external_id']} as read")
-                except Exception as e:
-                    logger.error(f"Error marking Gmail message as read: {str(e)}")
-                    # Continue anyway - this is not critical
+                # Check if Gmail response was successful
+                drive_access_granted = gmail_result.get("drive_access_granted", False)
+                if not drive_access_granted:
+                    drive_error = gmail_result.get("drive_error", "Unknown error granting access via Gmail")
                 
+                drive_response = gmail_result
+                logger.info(f"Gmail respond_to_share_request result: {gmail_result}")
+            else:
+                # Direct Drive API approach
+                logger.info(f"Using direct Drive API approach")
+                drive_service = GoogleDriveService.get_instance()
+                
+                # Check if user already has access
+                logger.info(f"Checking if user already has access")
+                has_access, existing_role = drive_service.check_access(
+                    request["folder_id"], 
+                    request["user_email"]
+                )
+                
+                if has_access:
+                    logger.info(f"User {request['user_email']} already has {existing_role} access")
+                    drive_access_granted = True
+                    drive_response = {"status": "already_has_access", "role": existing_role}
+                else:
+                    # Grant access with reader role
+                    logger.info(f"Granting reader access")
+                    result = drive_service.grant_access(
+                        request["folder_id"],
+                        request["user_email"],
+                        role="reader"  # Default to reader role
+                    )
+                    
+                    logger.info(f"Access grant result: {result}")
+                    drive_access_granted = True
+                    drive_response = result
         except Exception as e:
             logger.error(f"Error granting Google Drive access: {str(e)}")
             drive_error = str(e)
             drive_access_granted = False
         
-        # Get the updated request
+        # Get the updated request for the response
         updated_request = await db.db.drive_access_requests.find_one({"_id": ObjectId(request_id)})
         updated_request["id"] = str(updated_request["_id"])
         updated_request.pop("_id", None)
+        
+        # Calculate elapsed time
+        elapsed_time = (datetime.utcnow() - start_time).total_seconds()
+        logger.info(f"Approval process completed in {elapsed_time} seconds")
         
         response = {
             "status": "success",
             "message": f"Access request approved for {updated_request['user_email']}",
             "request": updated_request,
-            "drive_access_granted": drive_access_granted
+            "drive_access_granted": drive_access_granted,
+            "drive_response": drive_response,
+            "processing_time_seconds": elapsed_time
         }
         
         if drive_error:
             response["drive_error"] = drive_error
+            logger.error(f"Drive error occurred: {drive_error}")
         
         return response
     except Exception as e:
-        logger.error(f"Error approving access request: {str(e)}")
+        logger.error(f"Error approving access request: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error approving access request: {str(e)}"
@@ -481,16 +464,38 @@ async def reject_drive_access(
                 detail="Failed to update request status"
             )
         
+        # If this is a Gmail-sourced request, mark the message as read
+        gmail_action_result = None
+        if request.get("source") == "gmail" and request.get("external_id"):
+            try:
+                from ..integrations.gmail_service import GmailService
+                gmail_service = GmailService.get_instance()
+                
+                # Just mark the email as read - don't grant any permissions
+                gmail_action_result = await gmail_service.respond_to_share_request(
+                    message_id=request["external_id"],
+                    approved=False  # Not approving
+                )
+                logger.info(f"Marked Gmail message as read for rejected request: {gmail_action_result}")
+            except Exception as e:
+                logger.error(f"Error marking Gmail message as read: {str(e)}")
+                # Continue anyway - this is not critical
+        
         # Get the updated request
         updated_request = await db.db.drive_access_requests.find_one({"_id": ObjectId(request_id)})
         updated_request["id"] = str(updated_request["_id"])
         updated_request.pop("_id", None)
         
-        return {
+        response = {
             "status": "success",
             "message": f"Access request rejected for {updated_request['user_email']}",
             "request": updated_request
         }
+        
+        if gmail_action_result:
+            response["gmail_action"] = gmail_action_result
+        
+        return response
     except Exception as e:
         logger.error(f"Error rejecting access request: {str(e)}")
         raise HTTPException(

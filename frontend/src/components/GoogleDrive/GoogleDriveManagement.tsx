@@ -17,6 +17,7 @@ interface Folder {
 }
 
 interface AccessRequest {
+  drive_error: any;
   id: string;
   user_id: string;
   user_email: string;
@@ -140,8 +141,15 @@ const GoogleDriveManagement: React.FC = () => {
       setAccessRequests(filteredRequests);
     } catch (error) {
       console.error("Error fetching access requests:", error);
-      setError("Failed to fetch access requests");
-      showToast("Failed to fetch access requests", "error");
+
+      // More detailed error message
+      if (error instanceof Error) {
+        setError(`Failed to fetch access requests: ${error.message}`);
+        showToast(`Failed to fetch access requests: ${error.message}`, "error");
+      } else {
+        setError("Failed to fetch access requests");
+        showToast("Failed to fetch access requests", "error");
+      }
     } finally {
       setLoading(false);
     }
@@ -895,14 +903,18 @@ const GoogleDriveManagement: React.FC = () => {
                             disabled={processingRequest === request.id}
                             className="text-green-600 hover:text-green-900 px-2 py-1 rounded hover:bg-green-50"
                           >
-                            Approve
+                            {processingRequest === request.id
+                              ? "Processing..."
+                              : "Approve"}
                           </button>
                           <button
                             onClick={() => openRejectModal(request)}
                             disabled={processingRequest === request.id}
                             className="text-red-600 hover:text-red-900 px-2 py-1 rounded hover:bg-red-50"
                           >
-                            Reject
+                            {processingRequest === request.id
+                              ? "Processing..."
+                              : "Reject"}
                           </button>
                         </div>
                       )}
@@ -918,7 +930,21 @@ const GoogleDriveManagement: React.FC = () => {
                                 ? "Approved"
                                 : "Rejected"}{" "}
                               by {request.decision_by_email || "admin"}
+                              {request.decision_time && (
+                                <>
+                                  {" "}
+                                  on{" "}
+                                  {new Date(
+                                    request.decision_time
+                                  ).toLocaleString()}
+                                </>
+                              )}
                             </span>
+                          )}
+                          {request.drive_error && (
+                            <div className="text-red-500 text-xs mt-1">
+                              Error: {request.drive_error}
+                            </div>
                           )}
                         </div>
                       )}
