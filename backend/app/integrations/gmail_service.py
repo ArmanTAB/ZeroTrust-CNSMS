@@ -68,15 +68,15 @@ class GmailService:
             raise Exception(f"Failed to mark message as read: {str(e)}")
 
     def get_drive_share_requests(self):
-        """Get all emails related to Google Drive share requests"""
+        """Get all emails related to Google Drive share requests (language-independent)"""
         if not self.service:
             logger.error("Not authenticated with Gmail")
             raise Exception("Not authenticated with Gmail")
                 
         try:
-            # Use the exact sender email that appears in your emails
-            query = 'from:drive-shares-dm-noreply@google.com subject:"Share request for"'
-            logger.info(f"Searching Gmail with query: {query}")
+            # Search only by sender, not by subject text (which will be in different languages)
+            query = 'from:drive-shares-dm-noreply@google.com OR from:drive-shares-noreply@google.com'
+            logger.info(f"Searching Gmail with language-independent query: {query}")
             
             results = self.service.users().messages().list(
                 userId='me',
@@ -86,11 +86,11 @@ class GmailService:
             messages = results.get('messages', [])
             
             if not messages:
-                logger.info("No Drive share request emails found")
+                logger.info("No Drive share emails found")
                 return []
-                
-            logger.info(f"Found {len(messages)} Drive share request emails")
-                
+                    
+            logger.info(f"Found {len(messages)} Drive share emails")
+                    
             share_requests = []
             for message in messages:
                 msg = self.service.users().messages().get(
@@ -103,7 +103,7 @@ class GmailService:
                 headers = msg['payload']['headers']
                 subject = next((h['value'] for h in headers if h['name'] == 'Subject'), '')
                 date = next((h['value'] for h in headers if h['name'] == 'Date'), '')
-                    
+                
                 # Extract email body content
                 body = ''
                 if 'parts' in msg['payload']:
@@ -113,41 +113,231 @@ class GmailService:
                                 body = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
                 elif 'body' in msg['payload'] and 'data' in msg['payload']['body']:
                     body = base64.urlsafe_b64decode(msg['payload']['body']['data']).decode('utf-8')
-                    
-                # Extract folder name from subject
-                # Subject format: 'Share request for "FolderName"'
+                
+                # Log full message details for debugging
+                logger.info(f"Email ID: {message['id']}")
+                logger.info(f"Subject: {subject}")
+                logger.info(f"Body preview: {body[:100]}...")
+                
+                # Extract folder name using patterns that work across languages
+                # 1. Look for text in quotes in the subject line
                 folder_name = ''
-                if 'Share request for "' in subject:
-                    folder_name = subject.replace('Share request for "', '').replace('"', '')
+                import re
                 
-                # Extract requester from body
-                # Body format typically includes: "email@example.com requests access to an item:"
+                # Try to extract name in quotes from subject (works in many languages)
+                quotes_match = re.search(r'"([^"]+)"', subject)
+                if quotes_match:
+                    folder_name = quotes_match.group(1)
+                    logger.info(f"Extracted folder name from quotes: '{folder_name}'")
+                
+                # If no folder name from quotes, try to extract from specific patterns in the body
+                if not folder_name:
+                    # Try to find folder name patterns in any language
+                    # Look for patterns like "HR" with formatting/structure that appears in sharing emails
+                    folder_patterns = [
+                        r'\bHR\b',                         # Common HR folder
+                        r'\bFinance\b',                    # Common Finance folder
+                        r'\bИТ\b',                         # IT in Russian
+                        r'\bФинансы\b',                    # Finance in Russian
+                        r'\bОтдел кадров\b',               # HR in Russian
+                        r'\b[A-Za-zА-Яа-я0-9_\-\s]{1,30}\b' # Generic name pattern (fallback)
+                    ]
+                    
+                    for pattern in folder_patterns:
+                        matches = re.search(pattern, body)
+                        if matches:
+                            folder_name = matches.group(0)
+                            logger.info(f"Extracted folder name from body pattern: '{folder_name}'")
+                            break
+                
+                # Extract requester email - language independent using email pattern
                 requester = ''
-                for line in body.split('\n'):
-                    if 'requests access to an item:' in line:
-                        requester = line.split('requests access to an item:')[0].strip()
-                        break
+                email_pattern = r'[\w\.-]+@[\w\.-]+\.\w+'
                 
-                # Only add if we have both folder name and requester
-                if folder_name and requester:
-                    logger.info(f"Found request for folder '{folder_name}' from '{requester}'")
+                # First search in known areas of the message
+                email_matches = re.findall(email_pattern, body)
+                
+                if email_matches:
+                    # Filter out known system emails and Google addresses
+                    for email in email_matches:
+                        if (email != 'drive-shares-dm-noreply@google.com' and
+                            'noreply' not in email and
+                            'no-reply' not in email and
+                            'google.com' not in email):
+                            requester = email
+                            logger.info(f"Extracted requester from email pattern: '{requester}'")
+                            break
+                
+                # If still no requester, try to extract from the message structure
+                if not requester:
+                    # Extract from Google's typical format - even in different languages
+                    # Often followed by "запрашивает доступ" (Russian) or "requested access" (English)
+                    access_patterns = [
+                        r'(\S+@\S+\.\S+)\s+запрашивает\s+доступ',   # Russian pattern
+                        r'(\S+@\S+\.\S+)\s+requests\s+access',       # English pattern
+                        r'(\S+@\S+\.\S+)\s+requested\s+access',      # Another English variant
+                        r'(\S+@\S+\.\S+)\s+demande\s+',              # French pattern
+                        r'(\S+@\S+\.\S+)\s+solicita\s+',             # Spanish/Portuguese pattern
+                    ]
+                    
+                    for pattern in access_patterns:
+                        matches = re.search(pattern, body)
+                        if matches:
+                            requester = matches.group(1)
+                            logger.info(f"Extracted requester from language pattern: '{requester}'")
+                            break
+                
+                # Special case - extract from the email visual structure
+                # This is very specific to Google's email format but works across languages
+                if not requester:
+                    lines = body.split('\n')
+                    for i, line in enumerate(lines):
+                        if '@' in line and i > 0 and i < len(lines) - 1:
+                            # If this line contains an email and is near the top of the email
+                            email_match = re.search(email_pattern, line)
+                            if email_match:
+                                requester = email_match.group(0)
+                                logger.info(f"Extracted requester from email structure: '{requester}'")
+                                break
+                
+                # If we couldn't identify them from the content, fallback to using the complete
+                # information from the headers
+                if not folder_name:
+                    # Extract from the subject line by removing common prefixes in different languages
+                    subject_clean = subject
+                    prefixes_to_remove = [
+                        'Запрос доступа к файлу',  # Russian: "Access request to file"
+                        'Запрос доступа к папке',  # Russian: "Access request to folder" 
+                        'Share request for',       # English
+                        'Access request for',      # English 
+                        'Demande d\'accès à',      # French
+                        'Solicitud de acceso a',   # Spanish
+                    ]
+                    
+                    for prefix in prefixes_to_remove:
+                        if subject.startswith(prefix):
+                            subject_clean = subject[len(prefix):].strip()
+                            break
+                    
+                    if subject_clean and subject_clean != subject:
+                        # Remove quotes if present
+                        subject_clean = subject_clean.strip('"')
+                        folder_name = subject_clean
+                        logger.info(f"Extracted folder name from cleaned subject: '{folder_name}'")
+                
+                # Only add if we have minimal information
+                if folder_name or requester:
+                    # If we're missing folder name, use a placeholder with the subject
+                    if not folder_name:
+                        folder_name = f"Unknown Folder ({subject[:20]}...)" if len(subject) > 20 else f"Unknown Folder ({subject})"
+                    
+                    # If we're missing requester, use a placeholder
+                    if not requester:
+                        requester = "Unknown Requester"
+                    
                     share_requests.append({
                         'message_id': message['id'],
                         'subject': subject,
                         'date': date,
                         'folder_name': folder_name,
                         'requester': requester,
-                        'body': body[:200] + '...' if len(body) > 200 else body  # Truncate long bodies
+                        'body_preview': body[:200] + '...' if len(body) > 200 else body
                     })
+                    
+                    logger.info(f"Added request: Folder '{folder_name}' from '{requester}'")
                 else:
+                    # Log the failure case for debugging
                     logger.warning(f"Could not extract folder name or requester from message {message['id']}")
+                    logger.warning(f"Subject: {subject}")
+                    logger.warning(f"Body preview: {body[:100]}...")
+                    
+                    # Still add the message with placeholder data so we don't miss anything
+                    share_requests.append({
+                        'message_id': message['id'],
+                        'subject': subject,
+                        'date': date,
+                        'folder_name': f"Unknown Folder ({subject[:20]}...)" if len(subject) > 20 else f"Unknown Folder ({subject})",
+                        'requester': "Unknown Requester",
+                        'body_preview': body[:200] + '...' if len(body) > 200 else body
+                    })
                 
-            logger.info(f"Processed {len(share_requests)} valid Drive share request emails")
+            logger.info(f"Processed {len(share_requests)} valid Drive share emails")
             return share_requests
-            
+                
         except Exception as e:
-            logger.error(f"Error fetching Drive share request emails: {str(e)}")
-            raise Exception(f"Failed to fetch Drive share request emails: {str(e)}")
+            logger.error(f"Error fetching Drive share emails: {str(e)}")
+            raise Exception(f"Failed to fetch Drive share emails: {str(e)}")
+
+    # Add an enhanced debug method with message content
+    def debug_gmail_content(self, include_body=False):
+        """Debug function to print details of recent emails with optional body content"""
+        if not self.service:
+            logger.error("Not authenticated with Gmail")
+            raise Exception("Not authenticated with Gmail")
+                
+        try:
+            # Get most recent messages
+            results = self.service.users().messages().list(
+                userId='me',
+                maxResults=10
+            ).execute()
+                
+            messages = results.get('messages', [])
+            
+            if not messages:
+                logger.info("No emails found")
+                return []
+                    
+            logger.info(f"Found {len(messages)} recent emails. Examining...")
+            
+            email_details = []
+                
+            for message in messages:
+                # If include_body is True, get full message, otherwise just get metadata
+                format_type = 'full' if include_body else 'metadata'
+                headers_to_get = ['Subject', 'From', 'Date']
+                
+                msg = self.service.users().messages().get(
+                    userId='me', 
+                    id=message['id'],
+                    format=format_type,
+                    metadataHeaders=headers_to_get if format_type == 'metadata' else None
+                ).execute()
+                    
+                # Parse message details
+                headers = msg['payload']['headers']
+                subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No subject')
+                sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown sender')
+                date = next((h['value'] for h in headers if h['name'] == 'Date'), 'Unknown date')
+                
+                email_detail = {
+                    "id": message['id'],
+                    "subject": subject,
+                    "from": sender,
+                    "date": date
+                }
+                
+                # Extract body if requested
+                if include_body:
+                    body = ''
+                    if 'parts' in msg['payload']:
+                        for part in msg['payload']['parts']:
+                            if part['mimeType'] == 'text/plain':
+                                if 'data' in part['body']:
+                                    body = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
+                    elif 'body' in msg['payload'] and 'data' in msg['payload']['body']:
+                        body = base64.urlsafe_b64decode(msg['payload']['body']['data']).decode('utf-8')
+                    
+                    email_detail['body'] = body
+                    
+                logger.info(f"Email: Subject: {subject} | From: {sender} | Date: {date}")
+                email_details.append(email_detail)
+                
+            return email_details
+                
+        except Exception as e:
+            logger.error(f"Error debugging Gmail content: {str(e)}")
+            return []
         
     async def respond_to_share_request(self, message_id, approved=False, user_email=None, folder_id=None):
         """Respond to a Google Drive share request from Gmail"""

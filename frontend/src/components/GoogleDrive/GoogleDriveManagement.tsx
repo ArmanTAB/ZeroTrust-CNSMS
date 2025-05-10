@@ -246,31 +246,34 @@ const GoogleDriveManagement: React.FC = () => {
   const handleApproveRequest = async (requestId: string): Promise<void> => {
     setProcessingRequest(requestId);
     try {
+      // Show processing state in the UI
+      showToast("Processing approval...", "info");
+
+      // Call API to approve request
       const result = await AccessApi.approveDriveAccess(requestId);
 
-      if (result.drive_access_granted) {
+      // Handle successful response with drive error
+      if (result.drive_error) {
+        showToast(
+          `Request approved but error granting Google Drive access: ${result.drive_error}`,
+          "warning"
+        );
+      } else {
         showToast(
           "Access request approved and Google Drive access granted",
           "success"
         );
-      } else if (result.drive_error) {
-        showToast(
-          `Request approved but error granting Drive access: ${result.drive_error}`,
-          "warning"
-        );
-      } else {
-        showToast("Access request approved", "success");
       }
 
-      // Update the request in the list
+      // Update the request in the list to show it's approved
       setAccessRequests((prev) =>
         prev.map((req) =>
           req.id === requestId ? { ...req, status: "approved" as const } : req
         )
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error approving request:", error);
-      showToast("Failed to approve request", "error");
+      showToast(`Failed to approve request: ${error.message}`, "error");
     } finally {
       setProcessingRequest(null);
     }
@@ -287,22 +290,35 @@ const GoogleDriveManagement: React.FC = () => {
 
     setProcessingRequest(selectedRequest.id);
     try {
-      await AccessApi.rejectDriveAccess(selectedRequest.id, rejectReason);
+      // Show processing state in the UI
+      showToast("Processing rejection...", "info");
+
+      // Call API to reject request with optional reason
+      await AccessApi.rejectDriveAccess(
+        selectedRequest.id,
+        rejectReason ? rejectReason : undefined
+      );
+
+      // Show success message
       showToast("Access request rejected", "success");
 
-      // Update the request in the list
+      // Update the request in the list to show it's rejected
       setAccessRequests((prev) =>
         prev.map((req) =>
           req.id === selectedRequest.id
-            ? { ...req, status: "rejected" as const, reason: rejectReason }
+            ? {
+                ...req,
+                status: "rejected" as const,
+                reason: rejectReason || req.reason,
+              }
             : req
         )
       );
 
       setShowRejectModal(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error rejecting request:", error);
-      showToast("Failed to reject request", "error");
+      showToast(`Failed to reject request: ${error.message}`, "error");
     } finally {
       setProcessingRequest(null);
     }

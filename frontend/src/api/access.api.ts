@@ -228,14 +228,39 @@ const AccessApi = {
     reason?: string
   ): Promise<any> => {
     try {
+      console.log(
+        `Approving request ${requestId}${
+          reason ? ` with reason: ${reason}` : ""
+        }`
+      );
+
       const response = await api.post<any>(
         `/access/google-drive/requests/${requestId}/approve`,
         reason ? { reason } : {}
       );
+
+      // Log response for debugging
+      console.log("Approval response:", response.data);
+
+      // Check for error in response
+      if (response.data.drive_error) {
+        console.warn(
+          "Approval succeeded but drive access had error:",
+          response.data.drive_error
+        );
+      }
+
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error approving access request:", error);
-      throw error; // Re-throw to let the component handle it
+
+      // Try to extract detailed error message
+      const errorMessage =
+        error.response?.data?.detail ||
+        error.message ||
+        "Failed to approve request";
+
+      throw new Error(errorMessage);
     }
   },
 
@@ -247,14 +272,31 @@ const AccessApi = {
     reason?: string
   ): Promise<any> => {
     try {
+      console.log(
+        `Rejecting request ${requestId}${
+          reason ? ` with reason: ${reason}` : ""
+        }`
+      );
+
       const response = await api.post<any>(
         `/access/google-drive/requests/${requestId}/reject`,
         reason ? { reason } : {}
       );
+
+      // Log response for debugging
+      console.log("Rejection response:", response.data);
+
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error rejecting access request:", error);
-      throw error; // Re-throw to let the component handle it
+
+      // Try to extract detailed error message
+      const errorMessage =
+        error.response?.data?.detail ||
+        error.message ||
+        "Failed to reject request";
+
+      throw new Error(errorMessage);
     }
   },
 
