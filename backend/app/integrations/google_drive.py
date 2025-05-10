@@ -4,6 +4,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import os
 import logging
+import json  # Make sure to import json here too
 from ..db import db
 from datetime import datetime
 from bson.objectid import ObjectId
@@ -294,7 +295,7 @@ class GoogleDriveService:
             raise Exception(f"Failed to fetch pending share requests: {str(e)}")
         
     def grant_access(self, folder_id, user_email, role='reader'):
-        """Grant access to a folder for a user"""
+        """Grant access to a folder for a user - improved with multiple fallback methods"""
         if not self.service:
             logger.error("Not authenticated with Google Drive")
             raise Exception("Not authenticated with Google Drive")
@@ -313,8 +314,7 @@ class GoogleDriveService:
             try:
                 permissions = self.service.permissions().list(
                     fileId=folder_id,
-                    fields='permissions(id,emailAddress,role,type)',
-                    supportsAllDrives=True
+                    fields='permissions(id,emailAddress,role,type)'
                 ).execute()
                 
                 logger.info(f"Current permissions: {json.dumps(permissions, default=str)}")
@@ -334,8 +334,7 @@ class GoogleDriveService:
                         updated_perm = self.service.permissions().update(
                             fileId=folder_id,
                             permissionId=perm.get('id'),
-                            body={'role': role},
-                            supportsAllDrives=True
+                            body={'role': role}
                         ).execute()
                         
                         logger.info(f"Permission updated: {json.dumps(updated_perm, default=str)}")
@@ -352,52 +351,65 @@ class GoogleDriveService:
             
             logger.info(f"Creating permission: {json.dumps(user_permission, default=str)}")
             
+            # METHOD 1: Direct method like in test script (no supportsAllDrives)
             try:
+                logger.info("ATTEMPT 1: Using test script method (no supportsAllDrives)")
                 result = self.service.permissions().create(
                     fileId=folder_id,
                     body=user_permission,
                     fields='id,emailAddress,role',
-                    sendNotificationEmail=True,
-                    supportsAllDrives=True
+                    sendNotificationEmail=True
                 ).execute()
                 
-                logger.info(f"Permission created: {json.dumps(result, default=str)}")
+                logger.info(f"Method 1 successful: {json.dumps(result, default=str)}")
                 return result
-            except Exception as e:
-                error_message = str(e)
-                logger.error(f"Error creating permission: {error_message}")
+            except Exception as e1:
+                logger.error(f"Method 1 failed: {str(e1)}")
                 
-                # Try fallback method without supportsAllDrives
-                if "insufficientFilePermissions" in error_message:
-                    logger.info("Trying alternative permission method without supportsAllDrives...")
-                    try:
-                        alt_result = self.service.permissions().create(
-                            fileId=folder_id,
-                            body=user_permission,
-                            fields='id',
-                            sendNotificationEmail=True
-                        ).execute()
-                        
-                        logger.info(f"Alternative method succeeded: {json.dumps(alt_result, default=str)}")
-                        return alt_result
-                    except Exception as alt_e:
-                        logger.error(f"Alternative method also failed: {str(alt_e)}")
-                
-                # Try one more fallback using a different approach
+                # METHOD 2: With supportsAllDrives
                 try:
-                    logger.info("Trying final fallback method...")
-                    final_result = self.service.permissions().create(
+                    logger.info("ATTEMPT 2: With supportsAllDrives=True")
+                    result = self.service.permissions().create(
                         fileId=folder_id,
                         body=user_permission,
-                        sendNotificationEmail=False,
+                        fields='id,emailAddress,role',
+                        sendNotificationEmail=True,
+                        supportsAllDrives=True
                     ).execute()
                     
-                    logger.info(f"Final fallback succeeded: {json.dumps(final_result, default=str)}")
-                    return final_result
-                except Exception as final_e:
-                    logger.error(f"Final fallback method also failed: {str(final_e)}")
+                    logger.info(f"Method 2 successful: {json.dumps(result, default=str)}")
+                    return result
+                except Exception as e2:
+                    logger.error(f"Method 2 failed: {str(e2)}")
+                    
+                    # METHOD 3: Minimal parameters
+                    try:
+                        logger.info("ATTEMPT 3: Minimal parameters")
+                        result = self.service.permissions().create(
+                            fileId=folder_id,
+                            body=user_permission
+                        ).execute()
+                        
+                        logger.info(f"Method 3 successful: {json.dumps(result, default=str)}")
+                        return result
+                    except Exception as e3:
+                        logger.error(f"Method 3 failed: {str(e3)}")
+                        
+                        # Final attempt with no notification
+                        try:
+                            logger.info("FINAL ATTEMPT: No notification")
+                            result = self.service.permissions().create(
+                                fileId=folder_id,
+                                body=user_permission,
+                                sendNotificationEmail=False
+                            ).execute()
+                            
+                            logger.info(f"Final method successful: {json.dumps(result, default=str)}")
+                            return result
+                        except Exception as e4:
+                            logger.error(f"All methods failed: {str(e4)}")
+                            raise Exception(f"Failed to grant access after multiple attempts: {str(e4)}")
                 
-                raise Exception(f"Failed to grant access: {error_message}")
         except Exception as e:
             logger.error(f"Error in grant_access: {str(e)}")
             raise e

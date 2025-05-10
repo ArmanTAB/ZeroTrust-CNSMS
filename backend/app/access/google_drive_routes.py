@@ -2,14 +2,17 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Body, Query
 from typing import List, Annotated, Optional
 from datetime import datetime
+import json  # Add this import!
 from ..auth.routes import get_current_user
 from ..auth.models import User
 from .models import AccessLogCreate, AccessDecision, DriveAccessRequest, AccessRequestStatus
 from .utils import evaluate_access_request, log_access_attempt
-from ..integrations.google_drive import GoogleDriveService
+from ..integrations.google_drive import GoogleDriveService, SCOPES
 from ..db import db
 import logging
 from bson.objectid import ObjectId
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/access/google-drive", tags=["google-drive"])
@@ -317,21 +320,71 @@ async def approve_drive_access(
         drive_error = None
         
         try:
-            logger.info(f"Getting Google Drive service")
+            # Try the direct method from test script first
+            logger.info("Trying direct access grant method (test script approach)...")
+            
+            # Get credentials file path from the existing service
             drive_service = GoogleDriveService.get_instance()
+            credentials_file = drive_service.credentials_file
             
-            logger.info(f"Attempting to grant access to folder {request['folder_id']} for user {request['user_email']}")
-            drive_result = drive_service.grant_access(
-                request["folder_id"],
-                request["user_email"],
-                role="reader"
-            )
+            logger.info(f"Using credentials from: {credentials_file}")
             
-            logger.info(f"Drive API result: {json.dumps(drive_result, default=str)}")
+            # Create a fresh service object
+            credentials = service_account.Credentials.from_service_account_file(
+                credentials_file, scopes=SCOPES)
+            direct_service = build('drive', 'v3', credentials=credentials)
+            
+            # Create permission
+            user_permission = {
+                'type': 'user',
+                'role': 'reader',
+                'emailAddress': request["user_email"]
+            }
+            
+            logger.info(f"Creating permission with direct method: {json.dumps(user_permission, default=str)}")
+            
+            # Execute permission creation exactly as in the test script
+            drive_result = direct_service.permissions().create(
+                fileId=request["folder_id"],
+                body=user_permission,
+                fields='id,emailAddress,role',
+                sendNotificationEmail=True
+            ).execute()
+            
+            logger.info(f"Direct permission grant successful: {json.dumps(drive_result, default=str)}")
+            
+            # If this is a Gmail-sourced request, update Gmail
+            if request.get("source") == "gmail" and request.get("external_id"):
+                try:
+                    from ..integrations.gmail_service import GmailService
+                    gmail_service = GmailService.get_instance()
+                    await gmail_service.respond_to_share_request(
+                        message_id=request["external_id"],
+                        approved=True,
+                        user_email=request["user_email"],
+                        folder_id=request["folder_id"]
+                    )
+                except Exception as gmail_error:
+                    logger.error(f"Gmail response failed but Drive access granted: {str(gmail_error)}")
             
         except Exception as e:
-            logger.error(f"Error granting Google Drive access: {str(e)}", exc_info=True)
-            drive_error = str(e)
+            logger.error(f"Direct method failed, error: {str(e)}", exc_info=True)
+            
+            # Fall back to the service instance method
+            try:
+                logger.info("Direct method failed, falling back to service instance method...")
+                
+                drive_service = GoogleDriveService.get_instance()
+                drive_result = drive_service.grant_access(
+                    request["folder_id"],
+                    request["user_email"],
+                    role="reader"
+                )
+                
+                logger.info(f"Service instance grant result: {json.dumps(drive_result, default=str)}")
+            except Exception as e2:
+                logger.error(f"All access grant methods failed: {str(e2)}", exc_info=True)
+                drive_error = f"{str(e)} | Fallback error: {str(e2)}"
         
         # Get updated request from database
         updated_request = await db.db.drive_access_requests.find_one({"_id": ObjectId(request_id)})
@@ -347,9 +400,12 @@ async def approve_drive_access(
             "status": "success",
             "message": f"Access request approved for {updated_request['user_email']}",
             "request": updated_request,
-            "drive_result": drive_result,
+            "drive_access_granted": drive_result is not None,
             "elapsed_time": elapsed_time
         }
+        
+        if drive_result:
+            response["drive_result"] = drive_result
         
         if drive_error:
             response["drive_error"] = drive_error

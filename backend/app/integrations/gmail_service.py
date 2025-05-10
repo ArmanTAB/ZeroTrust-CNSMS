@@ -5,6 +5,7 @@ import email
 from email.mime.text import MIMEText
 from datetime import datetime
 from .gmail_oauth import get_gmail_service
+import json
 
 logger = logging.getLogger(__name__)
 
