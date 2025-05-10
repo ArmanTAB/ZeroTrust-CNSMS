@@ -1,4 +1,4 @@
-// frontend/src/api/access.api.ts
+// src/api/access.api.ts
 import api from "./api";
 import {
   AccessLog,
@@ -136,52 +136,6 @@ const AccessApi = {
   },
 
   /**
-   * Get Google Drive access requests
-   */
-  getDriveAccessRequests: async (status?: string): Promise<any[]> => {
-    try {
-      const params = status ? { status } : {};
-      console.log("Requesting access requests with params:", params);
-      const response = await api.get<any[]>("/access/google-drive/requests", {
-        params,
-      });
-      console.log("API response:", response.data);
-      return response.data;
-    } catch (error) {
-      console.error("Error fetching Google Drive access requests:", error);
-      throw error; // Re-throw to let the component handle it
-    }
-  },
-
-  /**
-   * Approve a Google Drive access request
-   */
-  approveDriveAccess: async (
-    requestId: string,
-    reason?: string
-  ): Promise<any> => {
-    const response = await api.post<any>(
-      `/access/google-drive/requests/${requestId}/approve`,
-      { reason }
-    );
-    return response.data;
-  },
-
-  /**
-   * Reject a Google Drive access request
-   */
-  rejectDriveAccess: async (
-    requestId: string,
-    reason?: string
-  ): Promise<any> => {
-    const response = await api.post<any>(
-      `/access/google-drive/requests/${requestId}/reject`,
-      { reason }
-    );
-    return response.data;
-  },
-
-  /**
    * Check status of user's pending access requests
    */
   checkUserAccessRequests: async (folderId: string): Promise<any> => {
@@ -225,6 +179,73 @@ const AccessApi = {
       console.error("Error syncing Google Drive folders:", error);
       throw error;
     }
+  },
+
+  /**
+   * Get a summary of access requests
+   */
+  getAccessRequestsSummary: async (): Promise<any> => {
+    try {
+      const response = await api.get<any>("/access/google-drive/summary");
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching access requests summary:", error);
+      return {
+        total: 0,
+        pending: 0,
+        approved: 0,
+        rejected: 0,
+        recent_pending: [],
+      };
+    }
+  },
+
+  /**
+   * Get Google Drive access requests with optional filtering
+   * If no status is provided, returns all requests (empty string)
+   */
+  getDriveAccessRequests: async (status?: string): Promise<any[]> => {
+    try {
+      // If status is undefined or null, pass an empty object to get all statuses
+      const params = status ? { status } : {};
+      console.log("Requesting access requests with params:", params);
+      const response = await api.get<any[]>("/access/google-drive/requests", {
+        params,
+      });
+      console.log("API response:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching Google Drive access requests:", error);
+      throw error; // Re-throw to let the component handle it
+    }
+  },
+
+  /**
+   * Approve a Google Drive access request
+   */
+  approveDriveAccess: async (
+    requestId: string,
+    reason?: string
+  ): Promise<any> => {
+    const response = await api.post<any>(
+      `/access/google-drive/requests/${requestId}/approve`,
+      reason ? { reason } : {}
+    );
+    return response.data;
+  },
+
+  /**
+   * Reject a Google Drive access request
+   */
+  rejectDriveAccess: async (
+    requestId: string,
+    reason?: string
+  ): Promise<any> => {
+    const response = await api.post<any>(
+      `/access/google-drive/requests/${requestId}/reject`,
+      reason ? { reason } : {}
+    );
+    return response.data;
   },
 };
 

@@ -55,7 +55,7 @@ async def list_google_drive_folders(
                     "id": folder["id"],
                     "name": folder["name"],
                     "sensitivity": db_folder.get("sensitivity", "internal"),
-                    "has_pending_request": pending_request is not None
+                    "hasPendingRequest": pending_request is not None
                 })
             
             return folders
@@ -78,7 +78,7 @@ async def list_google_drive_folders(
                     "id": folder["folder_id"],
                     "name": folder["name"],
                     "sensitivity": folder["sensitivity"],
-                    "has_pending_request": pending_request is not None
+                    "hasPendingRequest": pending_request is not None
                 })
             
             return folders
@@ -226,6 +226,7 @@ async def list_drive_access_requests(
     # Get requests from database
     requests = []
     try:
+        logger.info(f"Searching for requests with query: {query}")
         cursor = db.db.drive_access_requests.find(query).sort("request_time", -1)
         
         async for request in cursor:
@@ -428,8 +429,6 @@ async def reject_drive_access(
             detail=f"Error rejecting access request: {str(e)}"
         )
 
-# Updated sync_folders endpoint for google_drive_routes.py
-
 @router.post("/sync-folders")
 async def sync_google_drive_folders(
     current_user: Annotated[User, Depends(get_current_user)]
@@ -582,6 +581,13 @@ async def get_folder_details(
             
             # Fall back to database folder
             if db_folder:
+                # Check for pending request
+                pending_request = await db.db.drive_access_requests.find_one({
+                    "user_id": str(current_user.id),
+                    "folder_id": folder_id,
+                    "status": "pending"
+                })
+                
                 return {
                     "id": db_folder["folder_id"],
                     "name": db_folder["name"],
@@ -601,3 +607,52 @@ async def get_folder_details(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting folder details: {str(e)}"
         )
+
+@router.get("/summary", response_model=dict)
+async def get_access_requests_summary(
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """Get a summary of access requests by status"""
+    # Check if user has admin privileges
+    is_admin = current_user.role in ["admin", "security_analyst"]
+    
+    if not is_admin:
+        # For regular users, just return their own request counts
+        query_base = {"user_id": str(current_user.id)}
+    else:
+        # For admins, count all requests
+        query_base = {}
+    
+    try:
+        # Count requests by status
+        pending_count = await db.db.drive_access_requests.count_documents({**query_base, "status": "pending"})
+        approved_count = await db.db.drive_access_requests.count_documents({**query_base, "status": "approved"})
+        rejected_count = await db.db.drive_access_requests.count_documents({**query_base, "status": "rejected"})
+        total_count = await db.db.drive_access_requests.count_documents(query_base)
+        
+        # Get most recent pending requests for admins
+        recent_pending = []
+        if is_admin and pending_count > 0:
+            cursor = db.db.drive_access_requests.find(
+                {"status": "pending"}
+            ).sort("request_time", -1).limit(5)
+            
+            async for req in cursor:
+                req["id"] = str(req["_id"])
+                req.pop("_id", None)
+                recent_pending.append(req)
+        
+        return {
+            "total": total_count,
+            "pending": pending_count,
+            "approved": approved_count,
+            "rejected": rejected_count,
+            "recent_pending": recent_pending if is_admin else []
+        }
+    except Exception as e:
+        logger.error(f"Error getting access requests summary: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting access requests summary: {str(e)}"
+        )
+    

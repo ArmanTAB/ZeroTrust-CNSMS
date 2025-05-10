@@ -55,7 +55,7 @@ const GoogleDriveManagement: React.FC = () => {
   );
   const [filter, setFilter] = useState<FilterState>({
     search: "",
-    status: "pending",
+    status: "", // Changed from "pending" to empty string for "All"
   });
   const [syncingFolders, setSyncingFolders] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,9 +73,10 @@ const GoogleDriveManagement: React.FC = () => {
     if (activeTab === "folders") {
       fetchFolders();
     } else {
+      // When switching to the requests tab, fetch with current filter status
       fetchAccessRequests();
     }
-  }, [activeTab, filter.status]);
+  }, [activeTab]);
 
   const fetchFolders = async (): Promise<void> => {
     setLoading(true);
@@ -102,14 +103,20 @@ const GoogleDriveManagement: React.FC = () => {
     }
   };
 
-  const fetchAccessRequests = async (): Promise<void> => {
+  const fetchAccessRequests = async (
+    statusOverride?: string
+  ): Promise<void> => {
     if (!isAdmin) return;
 
     setLoading(true);
     setError(null);
     try {
-      console.log("Fetching access requests with status:", filter.status);
-      const requests = await AccessApi.getDriveAccessRequests(filter.status);
+      // Use the override status value if provided, otherwise use the current filter status
+      const statusToUse =
+        statusOverride !== undefined ? statusOverride : filter.status;
+      console.log("Fetching access requests with status:", statusToUse);
+
+      const requests = await AccessApi.getDriveAccessRequests(statusToUse);
       console.log("Retrieved requests:", requests);
 
       // Filter by search term if provided
@@ -133,6 +140,14 @@ const GoogleDriveManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const resetFilters = (): void => {
+    setFilter({ search: "", status: "" });
+    // Delay fetching until state is set
+    setTimeout(() => {
+      fetchAccessRequests("");
+    }, 0);
   };
 
   const handleRequestAccess = async (
@@ -244,6 +259,11 @@ const GoogleDriveManagement: React.FC = () => {
 
       // Refresh folders
       await fetchFolders();
+
+      // Also refresh access requests as they might reference the updated folders
+      if (activeTab === "requests") {
+        await fetchAccessRequests();
+      }
     } catch (error) {
       console.error("Error syncing Google Drive folders:", error);
       showToast("Failed to sync Google Drive folders", "error");
@@ -290,10 +310,20 @@ const GoogleDriveManagement: React.FC = () => {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ): void => {
     const { name, value } = e.target;
+
+    // Update the filter state
     setFilter((prev) => ({
       ...prev,
       [name]: value,
     }));
+
+    // If changing status filter, immediately fetch with new status value
+    if (name === "status") {
+      // Small delay to ensure state is updated
+      setTimeout(() => {
+        fetchAccessRequests(value);
+      }, 0);
+    }
   };
 
   // Apply search filter
@@ -327,6 +357,11 @@ const GoogleDriveManagement: React.FC = () => {
         </div>
       </div>
     );
+  };
+
+  const handleRefreshRequests = async (): Promise<void> => {
+    await fetchAccessRequests();
+    showToast("Access requests refreshed", "info");
   };
 
   const renderFolders = (): JSX.Element => (
@@ -497,15 +532,26 @@ const GoogleDriveManagement: React.FC = () => {
           >
             Search
           </label>
-          <input
-            type="text"
-            id="search"
-            name="search"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            placeholder="Search by user or folder name"
-            value={filter.search}
-            onChange={handleFilterChange}
-          />
+          <div className="flex">
+            <input
+              type="text"
+              id="search"
+              name="search"
+              className="w-full px-3 py-2 border border-gray-300 rounded-l-md"
+              placeholder="Search by user or folder name"
+              value={filter.search}
+              onChange={handleFilterChange}
+              onKeyPress={(e) => {
+                if (e.key === "Enter") applySearchFilter();
+              }}
+            />
+            <button
+              onClick={applySearchFilter}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-r-md hover:bg-gray-200"
+            >
+              Search
+            </button>
+          </div>
         </div>
         <div className="md:w-48">
           <label
@@ -527,16 +573,45 @@ const GoogleDriveManagement: React.FC = () => {
             <option value="rejected">Rejected</option>
           </select>
         </div>
-        <div className="self-end md:self-auto md:flex-shrink-0 md:mt-7">
-          <button
-            onClick={() => {
-              setFilter({ search: "", status: "pending" });
-              fetchAccessRequests();
-            }}
-            className="w-full md:w-auto px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
-          >
-            Reset
-          </button>
+        <div className="self-end md:self-auto md:flex-shrink-0 md:flex md:items-end md:ml-2">
+          <div className="flex gap-2">
+            <button
+              onClick={resetFilters}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+            >
+              Reset
+            </button>
+            <button
+              onClick={() => fetchAccessRequests()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              disabled={loading}
+            >
+              {loading ? (
+                <svg
+                  className="animate-spin h-5 w-5 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+              ) : (
+                "Refresh"
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -565,6 +640,12 @@ const GoogleDriveManagement: React.FC = () => {
               />
             </svg>
             <p className="mt-2 text-gray-500">No access requests found</p>
+            <button
+              onClick={handleRefreshRequests}
+              className="mt-4 px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              Refresh Requests
+            </button>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -690,6 +771,11 @@ const GoogleDriveManagement: React.FC = () => {
     </>
   );
 
+  // The pendingCount was defined as:
+  const pendingCount = accessRequests.filter(
+    (req) => req.status === "pending"
+  ).length;
+
   return (
     <div>
       {isAdmin && (
@@ -715,13 +801,9 @@ const GoogleDriveManagement: React.FC = () => {
                 onClick={() => setActiveTab("requests")}
               >
                 Access Requests{" "}
-                {accessRequests.filter((req) => req.status === "pending")
-                  .length > 0 && (
+                {pendingCount > 0 && (
                   <span className="ml-1 px-2 py-0.5 text-xs bg-red-100 text-red-800 rounded-full">
-                    {
-                      accessRequests.filter((req) => req.status === "pending")
-                        .length
-                    }
+                    {pendingCount}
                   </span>
                 )}
               </button>
