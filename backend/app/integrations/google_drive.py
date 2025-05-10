@@ -365,3 +365,135 @@ class GoogleDriveService:
         except Exception as e:
             logger.error(f"Error fetching pending share requests: {str(e)}")
             raise Exception(f"Failed to fetch pending share requests: {str(e)}")
+        
+    def grant_access(self, folder_id, user_email, role='reader'):
+        """Grant access to a folder for a user"""
+        if not self.service:
+            logger.error("Not authenticated with Google Drive")
+            raise Exception("Not authenticated with Google Drive")
+            
+        try:
+            logger.info(f"Granting {role} access to {user_email} for folder {folder_id}")
+            
+            # Check if the permission already exists
+            has_access, existing_role = self.check_access(folder_id, user_email)
+            
+            if has_access:
+                logger.info(f"User {user_email} already has {existing_role} access to folder {folder_id}")
+                
+                # If they have a different role and we want to update it
+                if existing_role != role:
+                    # Get permission ID
+                    permissions = self.service.permissions().list(
+                        fileId=folder_id,
+                        fields="permissions(id, emailAddress, role)",
+                        supportsAllDrives=True
+                    ).execute()
+                    
+                    permission_id = None
+                    for perm in permissions.get('permissions', []):
+                        if perm.get('emailAddress') == user_email:
+                            permission_id = perm.get('id')
+                            break
+                    
+                    if permission_id:
+                        # Update the role
+                        self.service.permissions().update(
+                            fileId=folder_id,
+                            permissionId=permission_id,
+                            body={'role': role},
+                            fields='id, role',
+                            supportsAllDrives=True
+                        ).execute()
+                        logger.info(f"Updated {user_email}'s role from {existing_role} to {role}")
+                
+                return {"id": permission_id, "role": role, "status": "existing_updated"}
+            
+            # Create new permission
+            user_permission = {
+                'type': 'user',
+                'role': role,
+                'emailAddress': user_email
+            }
+            
+            result = self.service.permissions().create(
+                fileId=folder_id,
+                body=user_permission,
+                fields='id',
+                sendNotificationEmail=True,
+                supportsAllDrives=True
+            ).execute()
+            
+            logger.info(f"Granted {role} access to {user_email} for folder {folder_id}, permission ID: {result.get('id')}")
+            return result
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"Error granting access: {error_msg}")
+            
+            # Handle specific error cases
+            if "insufficientFilePermissions" in error_msg:
+                raise Exception(f"The service account does not have permission to share this folder. Make sure the service account has edit access to the folder.")
+            else:
+                raise Exception(f"Failed to grant access: {error_msg}")
+            
+    def check_access(self, folder_id, user_email):
+        """Check if a user has access to a specific folder"""
+        if not self.service:
+            logger.error("Not authenticated with Google Drive")
+            raise Exception("Not authenticated with Google Drive")
+            
+        try:
+            # Get permissions for the folder
+            permissions = self.service.permissions().list(
+                fileId=folder_id,
+                fields="permissions(id, emailAddress, role, type)",
+                supportsAllDrives=True
+            ).execute()
+            
+            # Check if user email is in permissions
+            for perm in permissions.get('permissions', []):
+                if perm.get('emailAddress') == user_email:
+                    logger.info(f"User {user_email} has {perm.get('role')} access to folder {folder_id}")
+                    return True, perm.get('role')
+                    
+            # If we get here, user doesn't have direct permission
+            logger.info(f"User {user_email} does not have access to folder {folder_id}")
+            return False, None
+            
+        except Exception as e:
+            logger.error(f"Error checking access: {str(e)}")
+            return False, str(e)
+        
+    def find_folder_by_name(self, folder_name):
+        """Find a folder in Google Drive by name"""
+        if not self.service:
+            logger.error("Not authenticated with Google Drive")
+            raise Exception("Not authenticated with Google Drive")
+            
+        try:
+            # Search for the folder by name
+            query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and trashed=false"
+            logger.info(f"Searching for folder with name: {folder_name}")
+            
+            results = self.service.files().list(
+                q=query,
+                spaces='drive',
+                fields='files(id, name, owners, permissions)',
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True
+            ).execute()
+            
+            folders = results.get('files', [])
+            
+            if not folders:
+                logger.info(f"No folder found with name: {folder_name}")
+                return None
+            
+            # If multiple folders with the same name exist, use the first one
+            folder = folders[0]
+            logger.info(f"Found folder: {folder['name']} ({folder['id']})")
+            return folder
+            
+        except Exception as e:
+            logger.error(f"Error finding folder by name: {str(e)}")
+            return None

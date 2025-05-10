@@ -62,6 +62,7 @@ const GoogleDriveManagement: React.FC = () => {
   const [syncingFolders, setSyncingFolders] = useState<boolean>(false);
   const [syncingShares, setSyncingShares] = useState<boolean>(false);
   const [syncingGmail, setSyncingGmail] = useState<boolean>(false);
+  const [scanningFolders, setScanningFolders] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const isAdmin = user?.role === "admin" || user?.role === "security_analyst";
@@ -376,6 +377,30 @@ const GoogleDriveManagement: React.FC = () => {
     }
   };
 
+  const handleScanDriveFolders = async (): Promise<void> => {
+    if (!isAdmin) return;
+
+    setScanningFolders(true);
+    try {
+      const result = await AccessApi.scanDriveFolders();
+      showToast(
+        `Successfully scanned ${result.total_folders} folders (${result.updated_count} updated)`,
+        "success"
+      );
+
+      // Refresh the data
+      if (activeTab === "requests") {
+        await fetchAccessRequests();
+      } else {
+        await fetchFolders();
+      }
+    } catch (err: any) {
+      console.error("Error scanning Drive folders:", err);
+      showToast(err.message || "Error scanning Drive folders", "error");
+    } finally {
+      setScanningFolders(false);
+    }
+  };
   // Apply search filter
   const applySearchFilter = (): void => {
     fetchAccessRequests();

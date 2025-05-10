@@ -283,6 +283,56 @@ async def approve_drive_access(
                 }
             }
         
+        # Get the Google Drive service
+        drive_service = GoogleDriveService.get_instance()
+        
+        # Check if this is a placeholder folder
+        is_placeholder = request["folder_id"].startswith("placeholder_")
+        
+        # If it's a placeholder, try to find the real folder
+        if is_placeholder:
+            logger.warning(f"Request uses placeholder folder ID: {request['folder_id']}")
+            
+            # Try to find the real folder in Google Drive
+            real_folder = drive_service.find_folder_by_name(request["folder_name"])
+            
+            if real_folder:
+                # Update the folder ID in the request and in the folder mappings
+                real_folder_id = real_folder["id"]
+                logger.info(f"Found real Google Drive folder ID: {real_folder_id}")
+                
+                # Update the request to use the real folder ID
+                await db.db.drive_access_requests.update_one(
+                    {"_id": ObjectId(request_id)},
+                    {"$set": {"folder_id": real_folder_id, "is_placeholder": False}}
+                )
+                
+                # Also update the folder mapping
+                await db.db.folder_mappings.update_one(
+                    {"folder_id": request["folder_id"]},
+                    {"$set": {
+                        "folder_id": real_folder_id,
+                        "is_placeholder": False,
+                        "last_sync": datetime.utcnow()
+                    }}
+                )
+                
+                # Update our local copy of the request
+                request["folder_id"] = real_folder_id
+                request["is_placeholder"] = False
+                
+                logger.info(f"Updated placeholder to real folder ID: {real_folder_id}")
+            else:
+                # Still no real folder found, can't grant access
+                return {
+                    "status": "error",
+                    "message": f"Cannot approve request: Folder '{request['folder_name']}' not found in Google Drive",
+                    "request": {
+                        "id": request_id,
+                        "status": "pending"
+                    }
+                }
+        
         # Update the request status in the database
         now = datetime.utcnow()
         update_result = await db.db.drive_access_requests.update_one(
@@ -307,58 +357,46 @@ async def approve_drive_access(
         drive_access_granted = False
         drive_error = None
         
-        # If the request came from Google Drive, respond to it
-        if request.get("source") in ["drive_api", "gmail"] and request.get("external_id"):
-            try:
-                # Use the Drive API to grant access
-                drive_service = GoogleDriveService.get_instance()
-                
+        try:
+            # Log details for debugging
+            logger.info(f"Granting access to folder ID: {request['folder_id']}")
+            logger.info(f"User email: {request['user_email']}")
+            
+            # Check if user already has access
+            has_access, existing_role = drive_service.check_access(
+                request["folder_id"], 
+                request["user_email"]
+            )
+            
+            if has_access:
+                logger.info(f"User {request['user_email']} already has {existing_role} access")
+                drive_access_granted = True
+            else:
                 # Grant access with reader role
-                drive_service.grant_access(
+                result = drive_service.grant_access(
                     request["folder_id"],
                     request["user_email"],
                     role="reader"  # Default to reader role
                 )
                 
-                # If it came from Gmail, mark the message as read
-                if request.get("source") == "gmail" and request.get("external_id"):
-                    try:
-                        from ..integrations.gmail_service import GmailService
-                        gmail_service = GmailService.get_instance()
-                        gmail_service.mark_message_read(request["external_id"])
-                    except Exception as e:
-                        logger.error(f"Error marking Gmail message as read: {str(e)}")
-                        # Continue anyway - this is not critical
-                
+                logger.info(f"Access grant result: {result}")
                 drive_access_granted = True
-                logger.info(f"Successfully granted Drive access for request {request_id}")
-            except Exception as e:
-                logger.error(f"Error responding to Google Drive share request: {str(e)}")
-                drive_error = str(e)
-                drive_access_granted = False
-        else:
-            # For internal requests, use standard grant procedure
-            try:
-                drive_service = GoogleDriveService.get_instance()
+            
+            # If it came from Gmail, mark the message as read
+            if request.get("source") == "gmail" and request.get("external_id"):
+                try:
+                    from ..integrations.gmail_service import GmailService
+                    gmail_service = GmailService.get_instance()
+                    gmail_service.mark_message_read(request["external_id"])
+                    logger.info(f"Marked Gmail message {request['external_id']} as read")
+                except Exception as e:
+                    logger.error(f"Error marking Gmail message as read: {str(e)}")
+                    # Continue anyway - this is not critical
                 
-                # Check if user already has access
-                has_access, _ = drive_service.check_access(
-                    request["folder_id"], 
-                    request["user_email"]
-                )
-                
-                if not has_access:
-                    # Grant access with reader role
-                    drive_service.grant_access(
-                        request["folder_id"],
-                        request["user_email"],
-                        role="reader"  # Default to reader role
-                    )
-                
-                drive_access_granted = True
-            except Exception as e:
-                logger.error(f"Error granting Google Drive access: {str(e)}")
-                drive_error = str(e)
+        except Exception as e:
+            logger.error(f"Error granting Google Drive access: {str(e)}")
+            drive_error = str(e)
+            drive_access_granted = False
         
         # Get the updated request
         updated_request = await db.db.drive_access_requests.find_one({"_id": ObjectId(request_id)})
@@ -844,4 +882,79 @@ async def sync_gmail_share_requests(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error syncing Gmail share requests: {str(e)}"
+        )
+        
+@router.post("/scan-drive-folders", response_model=dict)
+async def scan_drive_folders(
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """Scan Google Drive for folders and update placeholders with real IDs"""
+    # Check if user has admin privileges
+    if current_user.role not in ["admin", "security_analyst"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to scan folders"
+        )
+    
+    try:
+        # Get Google Drive service
+        drive_service = GoogleDriveService.get_instance()
+        
+        # Get all folders from Google Drive
+        folders = drive_service.list_folders()
+        logger.info(f"Found {len(folders)} folders in Google Drive")
+        
+        # Get all folder mappings from the database
+        all_mappings = []
+        cursor = db.db.folder_mappings.find({})
+        async for mapping in cursor:
+            all_mappings.append(mapping)
+        
+        # Track updates
+        updated_count = 0
+        total_folders = len(folders)
+        
+        # Process each Drive folder
+        for drive_folder in folders:
+            folder_id = drive_folder["id"]
+            folder_name = drive_folder["name"]
+            
+            # Check if we have any placeholders with matching names
+            for mapping in all_mappings:
+                if mapping.get("is_placeholder", False) and mapping["name"].lower() == folder_name.lower():
+                    # Update the placeholder with the real ID
+                    await db.db.folder_mappings.update_one(
+                        {"_id": mapping["_id"]},
+                        {"$set": {
+                            "folder_id": folder_id,
+                            "is_placeholder": False,
+                            "last_sync": datetime.utcnow()
+                        }}
+                    )
+                    
+                    # Also update any pending requests using this placeholder
+                    placeholder_id = mapping["folder_id"]
+                    await db.db.drive_access_requests.update_many(
+                        {"folder_id": placeholder_id, "status": "pending"},
+                        {"$set": {
+                            "folder_id": folder_id,
+                            "is_placeholder": False
+                        }}
+                    )
+                    
+                    logger.info(f"Updated placeholder '{mapping['name']}' to real ID: {folder_id}")
+                    updated_count += 1
+                    break
+        
+        return {
+            "status": "success",
+            "message": f"Scanned {total_folders} folders, updated {updated_count} placeholders",
+            "total_folders": total_folders,
+            "updated_count": updated_count
+        }
+    except Exception as e:
+        logger.error(f"Error scanning Drive folders: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error scanning Drive folders: {str(e)}"
         )

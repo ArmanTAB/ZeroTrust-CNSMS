@@ -4,6 +4,7 @@ from datetime import datetime
 from ..db import db
 from ..integrations.gmail_service import GmailService
 from bson.objectid import ObjectId
+from ..integrations.google_drive import GoogleDriveService
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +13,9 @@ async def sync_gmail_share_requests():
     try:
         # Get Gmail service
         gmail_service = GmailService.get_instance()
+        
+        # Get Google Drive service
+        drive_service = GoogleDriveService.get_instance()
         
         # Get share requests from Gmail
         gmail_requests = gmail_service.get_drive_share_requests()
@@ -42,22 +46,69 @@ async def sync_gmail_share_requests():
                         folder = f
                         break
             
+            # Get folder ID from our database
             folder_id = folder.get('folder_id') if folder else None
             
-            # If folder not found, create a placeholder
-            if not folder_id:
-                logger.info(f"Creating placeholder for folder: {folder_name}")
-                folder_id = f"placeholder_{folder_name.lower().replace(' ', '_')}"
+            # Check if folder_id starts with "placeholder_" (not a real Google Drive ID)
+            if not folder_id or folder_id.startswith("placeholder_"):
+                # Try to find the real folder ID in Google Drive
+                drive_folder = drive_service.find_folder_by_name(folder_name)
                 
-                # Create a placeholder mapping
-                await db.db.folder_mappings.insert_one({
-                    "folder_id": folder_id,
-                    "name": folder_name,
-                    "sensitivity": "confidential",  # Default sensitivity
-                    "is_placeholder": True,
-                    "created_at": datetime.utcnow()
-                })
-                logger.info(f"Created placeholder mapping for folder: {folder_name}")
+                if drive_folder:
+                    # We found the real folder in Drive!
+                    real_folder_id = drive_folder["id"]
+                    logger.info(f"Found real Google Drive folder ID for '{folder_name}': {real_folder_id}")
+                    
+                    # Update the folder mapping if it exists, or create a new one
+                    if folder:
+                        await db.db.folder_mappings.update_one(
+                            {"_id": folder["_id"]},
+                            {"$set": {
+                                "folder_id": real_folder_id,
+                                "is_placeholder": False,
+                                "last_sync": datetime.utcnow()
+                            }}
+                        )
+                        logger.info(f"Updated placeholder folder with real ID: {real_folder_id}")
+                    else:
+                        # Determine sensitivity based on folder name
+                        sensitivity = "internal"  # Default
+                        folder_name_lower = folder_name.lower()
+                        
+                        if "hr" in folder_name_lower or "human resources" in folder_name_lower:
+                            sensitivity = "confidential"
+                        elif "finance" in folder_name_lower or "accounting" in folder_name_lower:
+                            sensitivity = "critical"
+                        elif "admin" in folder_name_lower or "it" in folder_name_lower:
+                            sensitivity = "admin"
+                        
+                        # Create a new mapping with the real ID
+                        await db.db.folder_mappings.insert_one({
+                            "folder_id": real_folder_id,
+                            "name": folder_name,
+                            "sensitivity": sensitivity,
+                            "is_placeholder": False,
+                            "last_sync": datetime.utcnow()
+                        })
+                        logger.info(f"Created new folder mapping with real ID: {real_folder_id}")
+                    
+                    # Use the real folder ID
+                    folder_id = real_folder_id
+                else:
+                    # Still no real folder found, create a placeholder
+                    if not folder_id:
+                        logger.info(f"Creating placeholder for folder: {folder_name}")
+                        folder_id = f"placeholder_{folder_name.lower().replace(' ', '_')}"
+                        
+                        # Create a placeholder mapping
+                        await db.db.folder_mappings.insert_one({
+                            "folder_id": folder_id,
+                            "name": folder_name,
+                            "sensitivity": "confidential",  # Default sensitivity
+                            "is_placeholder": True,
+                            "created_at": datetime.utcnow()
+                        })
+                        logger.info(f"Created placeholder mapping for folder: {folder_name}")
             
             # Check if request already exists
             existing_request = await db.db.drive_access_requests.find_one({
@@ -83,7 +134,8 @@ async def sync_gmail_share_requests():
                 "external_id": message_id,
                 "decision_time": None,
                 "decision_by": None,
-                "reason": None
+                "reason": None,
+                "is_placeholder": folder_id.startswith("placeholder_")  # Add this flag
             }
             
             # Try to find user by email

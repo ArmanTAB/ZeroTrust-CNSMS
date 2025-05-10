@@ -277,6 +277,21 @@ const AccessApi = {
       throw error;
     }
   },
+
+  /**
+   * Scan Google Drive folders and update placeholders
+   */
+  scanDriveFolders: async (): Promise<any> => {
+    try {
+      const response = await api.post<any>(
+        "/access/google-drive/scan-drive-folders"
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error scanning Drive folders:", error);
+      throw error;
+    }
+  },
 };
 
 export default AccessApi;
