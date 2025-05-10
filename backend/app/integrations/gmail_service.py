@@ -15,47 +15,30 @@ class GmailService:
     _instance = None
     
     @classmethod
-    def get_instance(cls, credentials_file=None):
+    def get_instance(cls):
         """Get singleton instance of GmailService"""
         if cls._instance is None:
-            cls._instance = cls(credentials_file)
+            cls._instance = cls()
         return cls._instance
     
-    def __init__(self, credentials_file=None):
-        """Initialize Gmail service with credentials"""
-        self.credentials = None
+    def __init__(self):
+        """Initialize Gmail service"""
         self.service = None
-        self.credentials_file = credentials_file or os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
-            'credentials', 
-            'gmail-credentials.json'
-        )
         self.authenticate()
         
     def authenticate(self):
-        """Authenticate with Gmail using service account"""
+        """Authenticate with Gmail using OAuth2"""
         try:
-            if os.path.exists(self.credentials_file):
-                logger.info(f"Authenticating with credentials file: {self.credentials_file}")
-                # For Gmail, you'll need a user account, not just service account
-                # You'd typically use OAuth2 for this, but for service accounts:
-                self.credentials = service_account.Credentials.from_service_account_file(
-                    self.credentials_file, 
-                    scopes=['https://www.googleapis.com/auth/gmail.readonly'],
-                    subject='zerotrust52@gmail.com'  # Impersonate this user
-                )
-                
-                # Build the service
-                if self.credentials:
-                    self.service = build('gmail', 'v1', credentials=self.credentials)
-                    logger.info("Successfully authenticated with Gmail")
-                    return True
+            self.service = get_gmail_service()
+            if self.service:
+                logger.info("Successfully authenticated with Gmail")
+                return True
             else:
-                logger.error(f"Credentials file not found: {self.credentials_file}")
+                logger.error("Failed to authenticate with Gmail")
+                return False
         except Exception as e:
-            logger.error(f"Failed to authenticate with Gmail: {str(e)}")
-        
-        return False
+            logger.error(f"Error authenticating with Gmail: {str(e)}")
+            return False
     
     def get_drive_share_requests(self):
         """Get all emails related to Google Drive share requests"""
