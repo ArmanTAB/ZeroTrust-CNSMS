@@ -344,6 +344,43 @@ const AccessApi = {
       throw error;
     }
   },
+
+  /**
+   * Approve a Google Drive access request using the direct approval method
+   * This uses the optimized backend method that works reliably
+   */
+  directApproveDriveAccess: async (
+    requestId: string,
+    reason?: string
+  ): Promise<any> => {
+    try {
+      console.log(
+        `Direct approving request ${requestId}${
+          reason ? ` with reason: ${reason}` : ""
+        }`
+      );
+
+      const response = await api.post<any>(
+        `/access/google-drive/requests/${requestId}/direct-approve`,
+        reason ? { reason } : {}
+      );
+
+      // Log response for debugging
+      console.log("Direct approval response:", response.data);
+
+      return response.data;
+    } catch (error: any) {
+      console.error("Error directly approving access request:", error);
+
+      // Try to extract detailed error message
+      const errorMessage =
+        error.response?.data?.detail ||
+        error.message ||
+        "Failed to approve request";
+
+      throw new Error(errorMessage);
+    }
+  },
 };
 
 export default AccessApi;

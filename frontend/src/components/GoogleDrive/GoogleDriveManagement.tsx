@@ -249,19 +249,21 @@ const GoogleDriveManagement: React.FC = () => {
       // Show processing state in the UI
       showToast("Processing approval...", "info");
 
-      // Call API to approve request
-      const result = await AccessApi.approveDriveAccess(requestId);
+      // Call API to approve request USING THE DIRECT METHOD
+      const result = await AccessApi.directApproveDriveAccess(requestId);
 
-      // Handle successful response with drive error
-      if (result.drive_error) {
-        showToast(
-          `Request approved but error granting Google Drive access: ${result.drive_error}`,
-          "warning"
-        );
-      } else {
+      // Handle successful response
+      if (result.status === "success") {
         showToast(
           "Access request approved and Google Drive access granted",
           "success"
+        );
+      } else if (result.status === "warning") {
+        showToast(result.message, "warning");
+      } else {
+        showToast(
+          result.message || "Request processed with unknown status",
+          "info"
         );
       }
 

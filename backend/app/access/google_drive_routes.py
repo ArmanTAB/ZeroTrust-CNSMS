@@ -1000,3 +1000,41 @@ async def scan_drive_folders(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error scanning Drive folders: {str(e)}"
         )
+        
+@router.post("/requests/{request_id}/direct-approve")
+async def direct_approve_access(
+    request_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    reason: Optional[dict] = Body(None)
+):
+    """Approve a Google Drive access request using direct approval method"""
+    # Check if user has admin privileges
+    if current_user.role not in ["admin", "security_analyst"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to approve access requests"
+        )
+    
+    # Extract reason text if provided
+    reason_text = reason.get("reason") if reason else None
+    
+    # Import the direct approval method
+    from .direct_approval import direct_approval
+    
+    # Call the direct approval method that uses the same approach as the test script
+    result = await direct_approval(
+        request_id=request_id,
+        decision_by=str(current_user.id),
+        decision_by_email=current_user.email,
+        reason=reason_text
+    )
+    
+    # If the direct approval method returns an error, raise an HTTP exception
+    if result.get("status") == "error":
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=result.get("message", "Unknown error")
+        )
+    
+    # Return the result directly
+    return result
