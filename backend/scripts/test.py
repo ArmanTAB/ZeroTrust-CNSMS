@@ -1,0 +1,290 @@
+# backend/scripts/setup_email_templates.py
+import os
+import sys
+from pathlib import Path
+
+# Add the parent directory to sys.path
+sys.path.append(str(Path(__file__).parent.parent))
+
+def create_email_templates():
+    """Create the email template directory and files"""
+    # Define the path to the email templates directory
+    templates_dir = Path(__file__).parent.parent / "email_templates"
+    
+    # Create the directory if it doesn't exist
+    if not templates_dir.exists():
+        templates_dir.mkdir(parents=True)
+        print(f"Created email templates directory: {templates_dir}")
+    
+    # Verification email template
+    verification_template = """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Your Zero Trust Security Account</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333333;
+            margin: 0;
+            padding: 0;
+            background-color: #f3f4f6;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .email-wrapper {
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #e0e0e0;
+            background-color: #ffffff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            background: linear-gradient(to right, #0d9488, #3b82f6);
+            padding: 24px;
+            text-align: center;
+        }
+        .logo-container {
+            display: inline-block;
+            height: 64px;
+            width: 64px;
+            background-color: white;
+            border-radius: 50%;
+            padding: 10px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .logo {
+            width: 32px;
+            height: 32px;
+            margin: 16px;
+        }
+        .header h1 {
+            color: white;
+            font-size: 24px;
+            margin: 8px 0;
+        }
+        .header p {
+            color: rgba(219, 234, 254, 1);
+            margin: 8px 0;
+        }
+        .content {
+            padding: 24px;
+            background-color: white;
+        }
+        .verification-box {
+            background-color: #f1f5f9;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            margin: 20px 0;
+            letter-spacing: 8px;
+            font-size: 32px;
+            font-weight: bold;
+        }
+        .button {
+            display: inline-block;
+            background: linear-gradient(to right, #0d9488, #3b82f6);
+            color: white;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+            margin: 16px 0;
+            text-align: center;
+        }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #6b7280;
+            font-size: 14px;
+        }
+        @media only screen and (max-width: 600px) {
+            .container {
+                width: 100%;
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="email-wrapper">
+            <div class="header">
+                <div class="logo-container">
+                    <svg class="logo" fill="none" stroke="#0d9488" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                </div>
+                <h1>Zero Trust Security</h1>
+                <p>Verify Your Account</p>
+            </div>
+            <div class="content">
+                <p>Hello {{full_name}},</p>
+                <p>Thank you for registering for Zero Trust Security Management System.</p>
+                <p>Your verification code is:</p>
+                <div class="verification-box">
+                    {{verification_code}}
+                </div>
+                <p>Please enter this code on the verification page to activate your account.</p>
+                <p>This code will expire in 24 hours.</p>
+                <p>If you did not create an account, please ignore this email.</p>
+                <p>Regards,<br>Zero Trust Security Team</p>
+            </div>
+            <div class="footer">
+                <p>&copy; 2025 Zero Trust Security. All rights reserved.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>"""
+    
+    # Password reset email template
+    password_reset_template = """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reset Your Zero Trust Security Password</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333333;
+            margin: 0;
+            padding: 0;
+            background-color: #f3f4f6;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .email-wrapper {
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #e0e0e0;
+            background-color: #ffffff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            background: linear-gradient(to right, #0d9488, #3b82f6);
+            padding: 24px;
+            text-align: center;
+        }
+        .logo-container {
+            display: inline-block;
+            height: 64px;
+            width: 64px;
+            background-color: white;
+            border-radius: 50%;
+            padding: 10px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .logo {
+            width: 32px;
+            height: 32px;
+            margin: 16px;
+        }
+        .header h1 {
+            color: white;
+            font-size: 24px;
+            margin: 8px 0;
+        }
+        .header p {
+            color: rgba(219, 234, 254, 1);
+            margin: 8px 0;
+        }
+        .content {
+            padding: 24px;
+            background-color: white;
+        }
+        .reset-box {
+            background-color: #f1f5f9;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            margin: 20px 0;
+            letter-spacing: 8px;
+            font-size: 32px;
+            font-weight: bold;
+        }
+        .button {
+            display: inline-block;
+            background: linear-gradient(to right, #0d9488, #3b82f6);
+            color: white;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+            margin: 16px 0;
+            text-align: center;
+        }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #6b7280;
+            font-size: 14px;
+        }
+        @media only screen and (max-width: 600px) {
+            .container {
+                width: 100%;
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="email-wrapper">
+            <div class="header">
+                <div class="logo-container">
+                    <svg class="logo" fill="none" stroke="#0d9488" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                    </svg>
+                </div>
+                <h1>Zero Trust Security</h1>
+                <p>Password Reset Request</p>
+            </div>
+            <div class="content">
+                <p>Hello {{full_name}},</p>
+                <p>We received a request to reset your password for Zero Trust Security Management System.</p>
+                <p>Your password reset code is:</p>
+                <div class="reset-box">
+                    {{reset_code}}
+                </div>
+                <p>Please enter this code on the reset password page to set a new password.</p>
+                <p>This code will expire in 24 hours.</p>
+                <p>If you did not request a password reset, please ignore this email or contact support.</p>
+                <p>Regards,<br>Zero Trust Security Team</p>
+            </div>
+            <div class="footer">
+                <p>&copy; 2025 Zero Trust Security. All rights reserved.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>"""
+    
+    # Write the templates to files
+    verification_path = templates_dir / "verification_email.html"
+    with open(verification_path, 'w', encoding='utf-8') as file:
+        file.write(verification_template)
+    print(f"Created verification email template: {verification_path}")
+    
+    reset_path = templates_dir / "password_reset_email.html"
+    with open(reset_path, 'w', encoding='utf-8') as file:
+        file.write(password_reset_template)
+    print(f"Created password reset email template: {reset_path}")
+    
+    print("\nEmail templates created successfully!")
+    print("Make sure to update backend/app/common/email_utils.py to use these templates.")
+
+if __name__ == "__main__":
+    create_email_templates()

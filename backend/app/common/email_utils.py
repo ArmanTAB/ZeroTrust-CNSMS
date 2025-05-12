@@ -1,15 +1,40 @@
+# backend/app/common/email_utils.py
 import smtplib
 import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
 import logging
+from pathlib import Path
 from ..config import settings
 
 logger = logging.getLogger(__name__)
 
+# Path to the email templates
+TEMPLATE_DIR = Path(__file__).parent.parent.parent / "email_templates"
+
+def load_template(template_name):
+    """Load an email template from the templates directory"""
+    try:
+        template_path = TEMPLATE_DIR / template_name
+        with open(template_path, 'r', encoding='utf-8') as file:
+            return file.read()
+    except Exception as e:
+        logger.error(f"Failed to load email template {template_name}: {str(e)}")
+        # Return a basic fallback template if loading fails
+        return """
+        <html>
+        <body>
+            <h2>Zero Trust Security</h2>
+            <p>Hello {{full_name}},</p>
+            <p>Your code is: {{code}}</p>
+            <p>Regards,<br>Zero Trust Security Team</p>
+        </body>
+        </html>
+        """
+
 def send_verification_email(recipient_email: str, verification_code: str, full_name: str):
-    """Send verification email with the verification code"""
+    """Send verification email with the verification code using custom template"""
     try:
         sender_email = settings.EMAIL_SENDER
         password = settings.EMAIL_PASSWORD
@@ -19,7 +44,14 @@ def send_verification_email(recipient_email: str, verification_code: str, full_n
         message["From"] = sender_email
         message["To"] = recipient_email
         
-        # Create the plain-text and HTML version of your message
+        # Load the HTML template
+        html_template = load_template("verification_email.html")
+        
+        # Replace placeholders with actual values
+        html_content = html_template.replace("{{full_name}}", full_name)
+        html_content = html_content.replace("{{verification_code}}", verification_code)
+        
+        # Create plain text version as fallback
         text = f"""
         Hello {full_name},
         
@@ -37,33 +69,9 @@ def send_verification_email(recipient_email: str, verification_code: str, full_n
         Zero Trust Security Team
         """
         
-        html = f"""
-        <html>
-        <body>
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
-                <div style="background-color: #3b82f6; padding: 15px; border-radius: 5px 5px 0 0; text-align: center;">
-                    <h2 style="color: white; margin: 0;">Zero Trust Security</h2>
-                </div>
-                <div style="padding: 20px;">
-                    <p>Hello <b>{full_name}</b>,</p>
-                    <p>Thank you for registering for Zero Trust Security Management System.</p>
-                    <p>Your verification code is:</p>
-                    <div style="background-color: #f3f4f6; padding: 15px; border-radius: 5px; text-align: center; font-size: 24px; letter-spacing: 5px; font-weight: bold;">
-                        {verification_code}
-                    </div>
-                    <p>Please enter this code on the verification page to activate your account.</p>
-                    <p>This code will expire in 24 hours.</p>
-                    <p>If you did not create an account, please ignore this email.</p>
-                    <p>Regards,<br>Zero Trust Security Team</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-        
         # Turn these into plain/html MIMEText objects
         part1 = MIMEText(text, "plain")
-        part2 = MIMEText(html, "html")
+        part2 = MIMEText(html_content, "html")
         
         # Add HTML/plain-text parts to MIMEMultipart message
         message.attach(part1)
@@ -82,7 +90,7 @@ def send_verification_email(recipient_email: str, verification_code: str, full_n
         return False
 
 def send_password_reset_email(recipient_email: str, reset_code: str, full_name: str):
-    """Send password reset email with reset code"""
+    """Send password reset email with reset code using custom template"""
     try:
         sender_email = settings.EMAIL_SENDER
         password = settings.EMAIL_PASSWORD
@@ -92,7 +100,14 @@ def send_password_reset_email(recipient_email: str, reset_code: str, full_name: 
         message["From"] = sender_email
         message["To"] = recipient_email
         
-        # Create the plain-text and HTML version of your message
+        # Load the HTML template
+        html_template = load_template("password_reset_email.html")
+        
+        # Replace placeholders with actual values
+        html_content = html_template.replace("{{full_name}}", full_name)
+        html_content = html_content.replace("{{reset_code}}", reset_code)
+        
+        # Create plain text version as fallback
         text = f"""
         Hello {full_name},
         
@@ -110,33 +125,9 @@ def send_password_reset_email(recipient_email: str, reset_code: str, full_name: 
         Zero Trust Security Team
         """
         
-        html = f"""
-        <html>
-        <body>
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
-                <div style="background-color: #3b82f6; padding: 15px; border-radius: 5px 5px 0 0; text-align: center;">
-                    <h2 style="color: white; margin: 0;">Zero Trust Security</h2>
-                </div>
-                <div style="padding: 20px;">
-                    <p>Hello <b>{full_name}</b>,</p>
-                    <p>We received a request to reset your password for Zero Trust Security Management System.</p>
-                    <p>Your password reset code is:</p>
-                    <div style="background-color: #f3f4f6; padding: 15px; border-radius: 5px; text-align: center; font-size: 24px; letter-spacing: 5px; font-weight: bold;">
-                        {reset_code}
-                    </div>
-                    <p>Please enter this code on the reset password page to set a new password.</p>
-                    <p>This code will expire in 24 hours.</p>
-                    <p>If you did not request a password reset, please ignore this email or contact support.</p>
-                    <p>Regards,<br>Zero Trust Security Team</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-        
         # Turn these into plain/html MIMEText objects
         part1 = MIMEText(text, "plain")
-        part2 = MIMEText(html, "html")
+        part2 = MIMEText(html_content, "html")
         
         # Add HTML/plain-text parts to MIMEMultipart message
         message.attach(part1)
