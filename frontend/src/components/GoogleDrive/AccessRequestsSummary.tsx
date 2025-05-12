@@ -86,26 +86,17 @@ const AccessRequestsSummary: React.FC = () => {
     );
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "pending":
-        return "text-yellow-600 bg-yellow-100";
-      case "approved":
-        return "text-green-600 bg-green-100";
-      case "rejected":
-        return "text-red-600 bg-red-100";
-      default:
-        return "text-gray-600 bg-gray-100";
-    }
-  };
-
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-xl font-semibold mb-4">Access Requests Summary</h2>
+      <h2 className="text-xl font-semibold mb-4 text-[#1E2761]">
+        Access Requests Summary
+      </h2>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-blue-50 p-4 rounded-lg">
-          <div className="text-blue-600 text-xl font-bold">{summary.total}</div>
+        <div className="bg-[#1E2761]/5 p-4 rounded-lg">
+          <div className="text-[#1E2761] text-xl font-bold">
+            {summary.total}
+          </div>
           <div className="text-sm text-gray-600">Total Requests</div>
         </div>
         <div className="bg-yellow-50 p-4 rounded-lg">
@@ -120,8 +111,8 @@ const AccessRequestsSummary: React.FC = () => {
           </div>
           <div className="text-sm text-gray-600">Approved</div>
         </div>
-        <div className="bg-red-50 p-4 rounded-lg">
-          <div className="text-red-600 text-xl font-bold">
+        <div className="bg-[#7A2048]/5 p-4 rounded-lg">
+          <div className="text-[#7A2048] text-xl font-bold">
             {summary.rejected}
           </div>
           <div className="text-sm text-gray-600">Rejected</div>
@@ -130,16 +121,20 @@ const AccessRequestsSummary: React.FC = () => {
 
       {summary.recent_pending.length > 0 && (
         <>
-          <h3 className="text-lg font-medium mb-3">Recent Pending Requests</h3>
+          <h3 className="text-lg font-medium mb-3 text-[#1E2761]">
+            Recent Pending Requests
+          </h3>
           <div className="space-y-3">
             {summary.recent_pending.map((request) => (
               <div
                 key={request.id}
-                className="border rounded-lg p-3 bg-gray-50"
+                className="border rounded-lg p-3 bg-gray-50 hover:shadow-md transition-shadow duration-200"
               >
                 <div className="flex justify-between items-start">
                   <div>
-                    <div className="font-medium">{request.user_email}</div>
+                    <div className="font-medium text-[#1E2761]">
+                      {request.user_email}
+                    </div>
                     <div className="text-sm text-gray-600">
                       {request.folder_name} •{" "}
                       {new Date(request.request_time).toLocaleDateString()}
@@ -148,13 +143,13 @@ const AccessRequestsSummary: React.FC = () => {
                   <div className="flex space-x-2">
                     <button
                       onClick={() => handleApprove(request.id)}
-                      className="px-3 py-1 bg-green-100 text-green-700 rounded-md hover:bg-green-200 text-sm"
+                      className="px-3 py-1 bg-[#408EC6] text-white rounded-md hover:bg-[#408EC6]/80 text-sm transition-colors duration-200"
                     >
                       Approve
                     </button>
                     <button
                       onClick={() => handleReject(request.id)}
-                      className="px-3 py-1 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+                      className="px-3 py-1 bg-[#7A2048] text-white rounded-md hover:bg-[#7A2048]/80 text-sm transition-colors duration-200"
                     >
                       Reject
                     </button>
@@ -169,7 +164,7 @@ const AccessRequestsSummary: React.FC = () => {
       <div className="mt-4 text-right">
         <button
           onClick={handleViewAll}
-          className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+          className="text-[#408EC6] hover:text-[#1E2761] text-sm font-medium transition-colors duration-200"
         >
           View All Requests
         </button>

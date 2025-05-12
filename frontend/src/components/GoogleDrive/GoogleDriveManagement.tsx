@@ -367,16 +367,16 @@ const GoogleDriveManagement: React.FC = () => {
   ): { label: string; class: string } => {
     switch (sensitivity) {
       case "critical":
-        return { label: "Critical", class: "bg-red-100 text-red-800" };
+        return { label: "Critical", class: "bg-[#7A2048] text-white" };
       case "confidential":
         return {
           label: "Confidential",
-          class: "bg-yellow-100 text-yellow-800",
+          class: "bg-[#7A2048] bg-opacity-80 text-white",
         };
       case "admin":
-        return { label: "Admin", class: "bg-purple-100 text-purple-800" };
+        return { label: "Admin", class: "bg-[#1E2761] text-white" };
       case "internal":
-        return { label: "Internal", class: "bg-blue-100 text-blue-800" };
+        return { label: "Internal", class: "bg-[#408EC6] text-white" };
       default:
         return { label: sensitivity, class: "bg-gray-100 text-gray-800" };
     }
@@ -436,11 +436,11 @@ const GoogleDriveManagement: React.FC = () => {
     if (!error) return null;
 
     return (
-      <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
+      <div className="bg-red-50 border-l-4 border-[#7A2048] p-4 mb-6">
         <div className="flex items-start">
           <div className="flex-shrink-0">
             <svg
-              className="h-5 w-5 text-red-400"
+              className="h-5 w-5 text-[#7A2048]"
               fill="currentColor"
               viewBox="0 0 20 20"
             >
@@ -452,8 +452,8 @@ const GoogleDriveManagement: React.FC = () => {
             </svg>
           </div>
           <div className="ml-3">
-            <h3 className="text-sm font-medium text-red-800">Error</h3>
-            <div className="mt-1 text-sm text-red-700">{error}</div>
+            <h3 className="text-sm font-medium text-[#7A2048]">Error</h3>
+            <div className="mt-1 text-sm text-[#7A2048] opacity-80">{error}</div>
           </div>
         </div>
       </div>
@@ -473,7 +473,7 @@ const GoogleDriveManagement: React.FC = () => {
             className={`px-4 py-2 rounded-md ${
               syncingFolders
                 ? "bg-gray-400 cursor-wait"
-                : "bg-blue-600 hover:bg-blue-700 text-white"
+                : "bg-[#1E2761] hover:bg-[#1E2761]/80 text-white"
             }`}
             onClick={handleSyncGoogleDriveFolders}
             disabled={syncingFolders}
@@ -537,7 +537,7 @@ const GoogleDriveManagement: React.FC = () => {
             <div className="mt-6">
               <button
                 type="button"
-                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[#408EC6] hover:bg-[#408EC6]/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#408EC6]"
                 onClick={handleSyncGoogleDriveFolders}
               >
                 <svg
@@ -566,7 +566,7 @@ const GoogleDriveManagement: React.FC = () => {
             >
               <div className="p-6">
                 <div className="flex items-center mb-4">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
+                  <div className="w-10 h-10 bg-[#1E2761] bg-opacity-10 rounded-lg flex items-center justify-center text-[#408EC6]">
                     <svg
                       className="w-6 h-6"
                       fill="none"
@@ -605,8 +605,8 @@ const GoogleDriveManagement: React.FC = () => {
                     folder.hasPendingRequest
                       ? "bg-yellow-100 text-yellow-800 cursor-default"
                       : accessRequesting === folder.id
-                      ? "bg-blue-400 text-white cursor-wait"
-                      : "bg-blue-600 hover:bg-blue-700 text-white"
+                      ? "bg-[#408EC6]/70 text-white cursor-wait"
+                      : "bg-[#408EC6] hover:bg-[#408EC6]/80 text-white"
                   }`}
                 >
                   {folder.hasPendingRequest
@@ -638,7 +638,7 @@ const GoogleDriveManagement: React.FC = () => {
               type="text"
               id="search"
               name="search"
-              className="w-full px-3 py-2 border border-gray-300 rounded-l-md"
+              className="w-full px-3 py-2 border border-gray-300 rounded-l-md focus:ring-[#408EC6] focus:border-[#408EC6]"
               placeholder="Search by user or folder name"
               value={filter.search}
               onChange={handleFilterChange}
@@ -648,7 +648,7 @@ const GoogleDriveManagement: React.FC = () => {
             />
             <button
               onClick={applySearchFilter}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-r-md hover:bg-gray-200"
+              className="px-4 py-2 bg-[#1E2761] text-white rounded-r-md hover:bg-[#1E2761]/80"
             >
               Search
             </button>
@@ -664,7 +664,7 @@ const GoogleDriveManagement: React.FC = () => {
           <select
             id="status"
             name="status"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#408EC6] focus:border-[#408EC6]"
             value={filter.status}
             onChange={handleFilterChange}
           >
@@ -684,7 +684,7 @@ const GoogleDriveManagement: React.FC = () => {
             </button>
             <button
               onClick={() => fetchAccessRequests()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              className="px-4 py-2 bg-[#408EC6] text-white rounded-md hover:bg-[#408EC6]/80"
               disabled={loading}
             >
               {loading ? (
@@ -722,12 +722,12 @@ const GoogleDriveManagement: React.FC = () => {
     <>
       {/* Add the sync buttons at the top of the requests tab too */}
       {isAdmin && (
-        <div className="mb-4 flex space-x-4">
+        <div className="mb-4 flex flex-wrap gap-2">
           <button
             className={`px-4 py-2 rounded-md ${
               syncingFolders
                 ? "bg-gray-400 cursor-wait"
-                : "bg-blue-600 hover:bg-blue-700 text-white"
+                : "bg-[#1E2761] hover:bg-[#1E2761]/80 text-white"
             }`}
             onClick={handleSyncGoogleDriveFolders}
             disabled={syncingFolders}
@@ -741,7 +741,7 @@ const GoogleDriveManagement: React.FC = () => {
             className={`px-4 py-2 rounded-md ${
               syncingShares
                 ? "bg-gray-400 cursor-wait"
-                : "bg-green-600 hover:bg-green-700 text-white"
+                : "bg-[#408EC6] hover:bg-[#408EC6]/80 text-white"
             }`}
             onClick={handleSyncShareRequests}
             disabled={syncingShares}
@@ -754,7 +754,7 @@ const GoogleDriveManagement: React.FC = () => {
             className={`px-4 py-2 rounded-md ${
               syncingGmail
                 ? "bg-gray-400 cursor-wait"
-                : "bg-purple-600 hover:bg-purple-700 text-white"
+                : "bg-[#7A2048] hover:bg-[#7A2048]/80 text-white"
             }`}
             onClick={handleSyncGmailRequests}
             disabled={syncingGmail}
@@ -788,194 +788,194 @@ const GoogleDriveManagement: React.FC = () => {
                 strokeLinejoin="round"
                 strokeWidth="2"
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-              />
-            </svg>
-            <p className="mt-2 text-gray-500">No access requests found</p>
-            <div className="mt-4 flex justify-center space-x-4">
-              <button
-                onClick={handleSyncShareRequests}
-                className="px-4 py-2 text-sm bg-green-600 text-white rounded-md hover:bg-green-700"
-                disabled={syncingShares}
-              >
-                {syncingShares ? "Syncing..." : "Sync Share Requests"}
-              </button>
-              <button
-                onClick={handleRefreshRequests}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                Refresh Requests
-              </button>
-              <button
-                className={`px-4 py-2 rounded-md ${
-                  syncingGmail
-                    ? "bg-gray-400 cursor-wait"
-                    : "bg-purple-600 hover:bg-purple-700 text-white"
-                }`}
-                onClick={handleSyncGmailRequests}
-                disabled={syncingGmail}
-              >
-                {syncingGmail ? "Syncing Gmail..." : "Sync Gmail"}
-              </button>
+                />
+              </svg>
+              <p className="mt-2 text-gray-500">No access requests found</p>
+              <div className="mt-4 flex justify-center space-x-4">
+                <button
+                  onClick={handleSyncShareRequests}
+                  className="px-4 py-2 text-sm bg-[#408EC6] text-white rounded-md hover:bg-[#408EC6]/80"
+                  disabled={syncingShares}
+                >
+                  {syncingShares ? "Syncing..." : "Sync Share Requests"}
+                </button>
+                <button
+                  onClick={handleRefreshRequests}
+                  className="px-4 py-2 text-sm bg-[#1E2761] text-white rounded-md hover:bg-[#1E2761]/80"
+                >
+                  Refresh Requests
+                </button>
+                <button
+                  className={`px-4 py-2 rounded-md text-sm ${
+                    syncingGmail
+                      ? "bg-gray-400 cursor-wait"
+                      : "bg-[#7A2048] hover:bg-[#7A2048]/80 text-white"
+                  }`}
+                  onClick={handleSyncGmailRequests}
+                  disabled={syncingGmail}
+                >
+                  {syncingGmail ? "Syncing Gmail..." : "Sync Gmail"}
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    User
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Folder
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Request Time
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Status
-                  </th>
-                  {/* Add new column for source */}
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Source
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {accessRequests.map((request) => (
-                  <tr key={request.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {request.user_email}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {request.device_id
-                          ? `Device: ${request.device_id}`
-                          : ""}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {request.folder_name}
-                      </div>
-                      <div className="text-xs text-gray-500 font-mono truncate max-w-xs">
-                        {request.folder_id}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {new Date(request.request_time).toLocaleString()}
-                      </div>
-                      {request.decision_time && (
-                        <div className="text-xs text-gray-500">
-                          Decision:{" "}
-                          {new Date(request.decision_time).toLocaleString()}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(
-                          request.status
-                        )}`}
-                      >
-                        {request.status}
-                      </span>
-                    </td>
-                    {/* New column displaying the source */}
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
-                        {request.source === "drive_api"
-                          ? "Google Drive"
-                          : request.source === "gmail"
-                          ? "Email"
-                          : request.source || "Internal"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {request.status === "pending" && (
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => handleApproveRequest(request.id)}
-                            disabled={processingRequest === request.id}
-                            className="text-green-600 hover:text-green-900 px-2 py-1 rounded hover:bg-green-50"
-                          >
-                            {processingRequest === request.id
-                              ? "Processing..."
-                              : "Approve"}
-                          </button>
-                          <button
-                            onClick={() => openRejectModal(request)}
-                            disabled={processingRequest === request.id}
-                            className="text-red-600 hover:text-red-900 px-2 py-1 rounded hover:bg-red-50"
-                          >
-                            {processingRequest === request.id
-                              ? "Processing..."
-                              : "Reject"}
-                          </button>
-                        </div>
-                      )}
-                      {request.status !== "pending" && (
-                        <div>
-                          {request.reason ? (
-                            <span className="text-gray-500">
-                              Reason: {request.reason}
-                            </span>
-                          ) : (
-                            <span className="text-gray-500">
-                              {request.status === "approved"
-                                ? "Approved"
-                                : "Rejected"}{" "}
-                              by {request.decision_by_email || "admin"}
-                              {request.decision_time && (
-                                <>
-                                  {" "}
-                                  on{" "}
-                                  {new Date(
-                                    request.decision_time
-                                  ).toLocaleString()}
-                                </>
-                              )}
-                            </span>
-                          )}
-                          {request.drive_error && (
-                            <div className="text-red-500 text-xs mt-1">
-                              Error: {request.drive_error}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </td>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      User
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Folder
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Request Time
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Status
+                    </th>
+                    {/* Add new column for source */}
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Source
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Actions
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </>
-  );
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {accessRequests.map((request) => (
+                    <tr key={request.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
+                          {request.user_email}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {request.device_id
+                            ? `Device: ${request.device_id}`
+                            : ""}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {request.folder_name}
+                        </div>
+                        <div className="text-xs text-gray-500 font-mono truncate max-w-xs">
+                          {request.folder_id}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {new Date(request.request_time).toLocaleString()}
+                        </div>
+                        {request.decision_time && (
+                          <div className="text-xs text-gray-500">
+                            Decision:{" "}
+                            {new Date(request.decision_time).toLocaleString()}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(
+                            request.status
+                          )}`}
+                        >
+                          {request.status}
+                        </span>
+                      </td>
+                      {/* New column displaying the source */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                          {request.source === "drive_api"
+                            ? "Google Drive"
+                            : request.source === "gmail"
+                            ? "Email"
+                            : request.source || "Internal"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        {request.status === "pending" && (
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleApproveRequest(request.id)}
+                              disabled={processingRequest === request.id}
+                              className="text-[#408EC6] hover:text-[#408EC6]/80 px-2 py-1 rounded hover:bg-[#408EC6]/10"
+                            >
+                              {processingRequest === request.id
+                                ? "Processing..."
+                                : "Approve"}
+                            </button>
+                            <button
+                              onClick={() => openRejectModal(request)}
+                              disabled={processingRequest === request.id}
+                              className="text-[#7A2048] hover:text-[#7A2048]/80 px-2 py-1 rounded hover:bg-[#7A2048]/10"
+                            >
+                              {processingRequest === request.id
+                                ? "Processing..."
+                                : "Reject"}
+                            </button>
+                          </div>
+                        )}
+                        {request.status !== "pending" && (
+                          <div>
+                            {request.reason ? (
+                              <span className="text-gray-500">
+                                Reason: {request.reason}
+                              </span>
+                            ) : (
+                              <span className="text-gray-500">
+                                {request.status === "approved"
+                                  ? "Approved"
+                                  : "Rejected"}{" "}
+                                by {request.decision_by_email || "admin"}
+                                {request.decision_time && (
+                                  <>
+                                    {" "}
+                                    on{" "}
+                                    {new Date(
+                                      request.decision_time
+                                    ).toLocaleString()}
+                                  </>
+                                )}
+                              </span>
+                            )}
+                            {request.drive_error && (
+                              <div className="text-[#7A2048] text-xs mt-1">
+                                Error: {request.drive_error}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </>
+    );
 
   // The pendingCount was defined as:
   const pendingCount = accessRequests.filter(
@@ -991,7 +991,7 @@ const GoogleDriveManagement: React.FC = () => {
               <button
                 className={`py-4 px-6 font-medium text-sm border-b-2 ${
                   activeTab === "folders"
-                    ? "border-blue-500 text-blue-600"
+                    ? "border-[#408EC6] text-[#408EC6]"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                 }`}
                 onClick={() => setActiveTab("folders")}
@@ -1001,14 +1001,14 @@ const GoogleDriveManagement: React.FC = () => {
               <button
                 className={`py-4 px-6 font-medium text-sm border-b-2 ${
                   activeTab === "requests"
-                    ? "border-blue-500 text-blue-600"
+                    ? "border-[#408EC6] text-[#408EC6]"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                 }`}
                 onClick={() => setActiveTab("requests")}
               >
                 Access Requests{" "}
                 {pendingCount > 0 && (
-                  <span className="ml-1 px-2 py-0.5 text-xs bg-red-100 text-red-800 rounded-full">
+                  <span className="ml-1 px-2 py-0.5 text-xs bg-[#7A2048] text-white rounded-full">
                     {pendingCount}
                   </span>
                 )}
@@ -1020,7 +1020,7 @@ const GoogleDriveManagement: React.FC = () => {
 
       {loading ? (
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
+          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#408EC6]"></div>
         </div>
       ) : activeTab === "folders" ? (
         renderFolders()
@@ -1053,9 +1053,9 @@ const GoogleDriveManagement: React.FC = () => {
             <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
               <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 <div className="sm:flex sm:items-start">
-                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-[#7A2048]/10 sm:mx-0 sm:h-10 sm:w-10">
                     <svg
-                      className="h-6 w-6 text-red-600"
+                      className="h-6 w-6 text-[#7A2048]"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -1093,7 +1093,7 @@ const GoogleDriveManagement: React.FC = () => {
                           type="text"
                           name="reason"
                           id="reason"
-                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-[#7A2048] focus:border-[#7A2048] sm:text-sm"
                           placeholder="Provide a reason for rejection"
                           value={rejectReason}
                           onChange={(e) => setRejectReason(e.target.value)}
@@ -1106,7 +1106,7 @@ const GoogleDriveManagement: React.FC = () => {
               <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
                 <button
                   type="button"
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-[#7A2048] text-base font-medium text-white hover:bg-[#7A2048]/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#7A2048] sm:ml-3 sm:w-auto sm:text-sm"
                   onClick={handleRejectRequest}
                   disabled={processingRequest === selectedRequest?.id}
                 >
@@ -1116,7 +1116,7 @@ const GoogleDriveManagement: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#408EC6] sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                   onClick={() => setShowRejectModal(false)}
                 >
                   Cancel
