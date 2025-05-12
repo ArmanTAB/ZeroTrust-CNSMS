@@ -108,7 +108,7 @@ const ProfilePage: React.FC = () => {
     <MainLayout>
       <div className="max-w-3xl mx-auto">
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-4">
+          <div className="bg-gradient-to-r from-[#1E2761] to-[#408EC6] px-6 py-4">
             <h1 className="text-xl font-semibold text-white">User Profile</h1>
           </div>
 
@@ -150,7 +150,7 @@ const ProfilePage: React.FC = () => {
 
               {loading && statusChecked === false ? (
                 <div className="text-center py-4">
-                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500 mb-2"></div>
+                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-[#1E2761] mb-2"></div>
                   <p className="text-gray-600">Checking 2FA status...</p>
                 </div>
               ) : (
@@ -164,7 +164,7 @@ const ProfilePage: React.FC = () => {
                       </p>
                       {totpEnabled ? (
                         <button
-                          className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors duration-200"
+                          className="px-4 py-2 bg-[#7A2048] text-white rounded-md hover:bg-[#7A2048]/90 focus:outline-none focus:ring-2 focus:ring-[#7A2048] transition-colors duration-200"
                           onClick={handleDisableTOTP}
                           disabled={loading}
                         >
@@ -172,7 +172,7 @@ const ProfilePage: React.FC = () => {
                         </button>
                       ) : (
                         <button
-                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"
+                          className="px-4 py-2 bg-[#408EC6] text-white rounded-md hover:bg-[#408EC6]/90 focus:outline-none focus:ring-2 focus:ring-[#408EC6] transition-colors duration-200"
                           onClick={handleSetupTOTP}
                           disabled={loading}
                         >
@@ -189,7 +189,7 @@ const ProfilePage: React.FC = () => {
                         of security to your account.
                       </p>
                       <button
-                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"
+                        className="px-4 py-2 bg-[#408EC6] text-white rounded-md hover:bg-[#408EC6]/90 focus:outline-none focus:ring-2 focus:ring-[#408EC6] transition-colors duration-200"
                         onClick={handleSetupTOTP}
                         disabled={loading}
                       >
@@ -233,7 +233,7 @@ const ProfilePage: React.FC = () => {
                       <div className="flex space-x-4 mb-4">
                         <input
                           type="text"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#408EC6] focus:border-[#408EC6]"
                           placeholder="Enter 6-digit code"
                           value={verificationCode}
                           onChange={(e) => {
@@ -245,7 +245,7 @@ const ProfilePage: React.FC = () => {
                           }}
                         />
                         <button
-                          className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors duration-200"
+                          className="px-4 py-2 bg-[#408EC6] text-white rounded-md hover:bg-[#408EC6]/90 focus:outline-none focus:ring-2 focus:ring-[#408EC6] transition-colors duration-200"
                           onClick={handleVerifyTOTP}
                           disabled={loading || verificationCode.length !== 6}
                         >
@@ -255,7 +255,7 @@ const ProfilePage: React.FC = () => {
 
                       <div>
                         <button
-                          className="text-sm text-gray-600 hover:text-gray-900"
+                          className="text-sm text-[#1E2761] hover:text-[#408EC6]"
                           onClick={() => {
                             setSetupStep("check");
                             setSetupData(null);

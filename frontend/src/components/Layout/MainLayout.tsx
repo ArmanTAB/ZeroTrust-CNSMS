@@ -78,11 +78,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const getRoleColor = () => {
     switch (user?.role) {
       case "admin":
-        return "bg-purple-600";
+        return "bg-[#7A2048]"; // Burgundy red
       case "security_analyst":
-        return "bg-blue-600";
+        return "bg-[#408EC6]"; // Royal blue
       case "network_admin":
-        return "bg-green-600";
+        return "bg-[#1E2761]"; // Midnight blue
       default:
         return "bg-gray-600";
     }
@@ -113,15 +113,15 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
-        <div className="flex flex-col flex-grow bg-gradient-to-b from-blue-800 to-blue-900 overflow-y-auto">
-          <div className="flex items-center justify-between h-16 bg-blue-900 bg-opacity-40 px-4">
+        <div className="flex flex-col flex-grow bg-gradient-to-b from-[#1E2761] to-[#1e2761f2] overflow-y-auto">
+          <div className="flex items-center justify-between h-16 bg-[#1E2761] bg-opacity-40 px-4">
             <div
               className={`flex items-center ${
                 isSidebarCollapsed && !isHovering ? "justify-center w-full" : ""
               }`}
             >
               <svg
-                className="h-8 w-8 text-blue-300"
+                className="h-8 w-8 text-[#408EC6]"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -146,7 +146,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             <button
               type="button"
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className={`text-white hover:text-blue-200 transition-opacity duration-200 ${
+              className={`text-white hover:text-[#408EC6] transition-opacity duration-200 ${
                 isSidebarCollapsed && !isHovering ? "opacity-0" : "opacity-100"
               }`}
               aria-label={
@@ -182,15 +182,15 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               to="/dashboard"
               className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 group ${
                 isActiveRoute("/dashboard")
-                  ? "bg-blue-700 text-white"
-                  : "text-blue-100 hover:bg-blue-800 hover:text-white"
+                  ? "bg-[#408EC6] text-white"
+                  : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
               } ${isSidebarCollapsed && !isHovering ? "justify-center" : ""}`}
             >
               <svg
                 className={`flex-shrink-0 w-6 h-6 transition-colors duration-200 ${
                   isActiveRoute("/dashboard")
                     ? "text-white"
-                    : "text-blue-300 group-hover:text-white"
+                    : "text-gray-300 group-hover:text-white"
                 }`}
                 fill="none"
                 stroke="currentColor"
@@ -217,15 +217,15 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               to="/devices"
               className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 group ${
                 isActiveRoute("/devices")
-                  ? "bg-blue-700 text-white"
-                  : "text-blue-100 hover:bg-blue-800 hover:text-white"
+                  ? "bg-[#408EC6] text-white"
+                  : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
               } ${isSidebarCollapsed && !isHovering ? "justify-center" : ""}`}
             >
               <svg
                 className={`flex-shrink-0 w-6 h-6 transition-colors duration-200 ${
                   isActiveRoute("/devices")
                     ? "text-white"
-                    : "text-blue-300 group-hover:text-white"
+                    : "text-gray-300 group-hover:text-white"
                 }`}
                 fill="none"
                 stroke="currentColor"
@@ -252,15 +252,15 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               to="/access-logs"
               className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 group ${
                 isActiveRoute("/access-logs")
-                  ? "bg-blue-700 text-white"
-                  : "text-blue-100 hover:bg-blue-800 hover:text-white"
+                  ? "bg-[#408EC6] text-white"
+                  : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
               } ${isSidebarCollapsed && !isHovering ? "justify-center" : ""}`}
             >
               <svg
                 className={`flex-shrink-0 w-6 h-6 transition-colors duration-200 ${
                   isActiveRoute("/access-logs")
                     ? "text-white"
-                    : "text-blue-300 group-hover:text-white"
+                    : "text-gray-300 group-hover:text-white"
                 }`}
                 fill="none"
                 stroke="currentColor"
@@ -287,15 +287,15 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               to="/profile"
               className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 group ${
                 isActiveRoute("/profile")
-                  ? "bg-blue-700 text-white"
-                  : "text-blue-100 hover:bg-blue-800 hover:text-white"
+                  ? "bg-[#408EC6] text-white"
+                  : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
               } ${isSidebarCollapsed && !isHovering ? "justify-center" : ""}`}
             >
               <svg
                 className={`flex-shrink-0 w-6 h-6 transition-colors duration-200 ${
                   isActiveRoute("/profile")
                     ? "text-white"
-                    : "text-blue-300 group-hover:text-white"
+                    : "text-gray-300 group-hover:text-white"
                 }`}
                 fill="none"
                 stroke="currentColor"
@@ -322,15 +322,15 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               to="/google-drive"
               className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 group ${
                 isActiveRoute("/google-drive")
-                  ? "bg-blue-700 text-white"
-                  : "text-blue-100 hover:bg-blue-800 hover:text-white"
+                  ? "bg-[#408EC6] text-white"
+                  : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
               } ${isSidebarCollapsed && !isHovering ? "justify-center" : ""}`}
             >
               <svg
                 className={`flex-shrink-0 w-6 h-6 transition-colors duration-200 ${
                   isActiveRoute("/google-drive")
                     ? "text-white"
-                    : "text-blue-300 group-hover:text-white"
+                    : "text-gray-300 group-hover:text-white"
                 }`}
                 fill="none"
                 stroke="currentColor"
@@ -355,7 +355,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             </Link>
           </nav>
           <div
-            className={`p-4 bg-blue-900 bg-opacity-40 transition-all duration-200 ${
+            className={`p-4 bg-[#1E2761] bg-opacity-60 transition-all duration-200 ${
               isSidebarCollapsed && !isHovering ? "py-2 px-2" : ""
             }`}
           >
@@ -379,7 +379,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 <p className="text-sm font-medium text-white">
                   {user?.full_name}
                 </p>
-                <p className="text-xs text-blue-200 capitalize">
+                <p className="text-xs text-gray-300 capitalize">
                   {user?.role?.replace("_", " ")}
                 </p>
               </div>
@@ -387,7 +387,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             <button
               type="button"
               onClick={handleLogout}
-              className={`mt-3 flex items-center justify-center text-sm text-white bg-blue-700 bg-opacity-50 rounded-md hover:bg-blue-600 transition-all duration-200 ${
+              className={`mt-3 flex items-center justify-center text-sm text-white bg-[#7A2048] bg-opacity-80 rounded-md hover:bg-[#7A2048] transition-all duration-200 ${
                 isSidebarCollapsed && !isHovering
                   ? "w-8 h-8 mx-auto p-0"
                   : "w-full px-4 py-2"
@@ -442,7 +442,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               <button
                 type="button"
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 p-1"
+                className="text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#408EC6] p-1"
                 aria-label="Toggle mobile menu"
               >
                 {isMobileMenuOpen ? (
@@ -507,13 +507,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             onClick={() => setIsMobileMenuOpen(false)}
           >
             <div
-              className="fixed inset-y-0 left-0 w-full max-w-xs bg-gradient-to-b from-blue-800 to-blue-900 overflow-y-auto"
+              className="fixed inset-y-0 left-0 w-full max-w-xs bg-gradient-to-b from-[#1E2761] to-[#1e2761f2] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between h-16 px-6 bg-blue-900 bg-opacity-40">
+              <div className="flex items-center justify-between h-16 px-6 bg-[#1E2761] bg-opacity-40">
                 <div className="flex items-center">
                   <svg
-                    className="h-8 w-8 text-blue-300"
+                    className="h-8 w-8 text-[#408EC6]"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -562,7 +562,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                       <p className="text-sm font-medium text-white">
                         {user?.full_name}
                       </p>
-                      <p className="text-xs text-blue-200 capitalize">
+                      <p className="text-xs text-gray-300 capitalize">
                         {user?.role?.replace("_", " ")}
                       </p>
                     </div>
@@ -573,8 +573,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                     to="/dashboard"
                     className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 ${
                       isActiveRoute("/dashboard")
-                        ? "bg-blue-700 text-white"
-                        : "text-blue-100 hover:bg-blue-800 hover:text-white"
+                        ? "bg-[#408EC6] text-white"
+                        : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
                     }`}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
@@ -597,8 +597,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                     to="/devices"
                     className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 ${
                       isActiveRoute("/devices")
-                        ? "bg-blue-700 text-white"
-                        : "text-blue-100 hover:bg-blue-800 hover:text-white"
+                        ? "bg-[#408EC6] text-white"
+                        : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
                     }`}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
@@ -621,8 +621,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                     to="/access-logs"
                     className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 ${
                       isActiveRoute("/access-logs")
-                        ? "bg-blue-700 text-white"
-                        : "text-blue-100 hover:bg-blue-800 hover:text-white"
+                        ? "bg-[#408EC6] text-white"
+                        : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
                     }`}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
@@ -645,8 +645,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                     to="/profile"
                     className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 ${
                       isActiveRoute("/profile")
-                        ? "bg-blue-700 text-white"
-                        : "text-blue-100 hover:bg-blue-800 hover:text-white"
+                        ? "bg-[#408EC6] text-white"
+                        : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
                     }`}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
@@ -673,7 +673,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                       handleLogout();
                       setIsMobileMenuOpen(false);
                     }}
-                    className="w-full flex items-center justify-center px-4 py-2 text-sm text-white bg-blue-700 bg-opacity-50 rounded-md hover:bg-blue-600 transition-colors duration-200"
+                    className="w-full flex items-center justify-center px-4 py-2 text-sm text-white bg-[#7A2048] bg-opacity-80 rounded-md hover:bg-[#7A2048] transition-colors duration-200"
                   >
                     <svg
                       className="w-4 h-4 mr-2"
