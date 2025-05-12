@@ -159,11 +159,11 @@ const VerifyEmailPage: React.FC = () => {
 
   if (isVerified) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full bg-white shadow-xl rounded-2xl overflow-hidden">
-          <div className="bg-green-100 p-6 text-center">
+          <div className="bg-teal-100 p-6 text-center">
             <div className="flex justify-center mb-4">
-              <div className="h-16 w-16 bg-green-500 rounded-full flex items-center justify-center shadow-md">
+              <div className="h-16 w-16 bg-teal-500 rounded-full flex items-center justify-center shadow-md">
                 <svg
                   className="h-8 w-8 text-white"
                   fill="none"
@@ -179,10 +179,10 @@ const VerifyEmailPage: React.FC = () => {
                 </svg>
               </div>
             </div>
-            <h2 className="text-2xl font-bold text-green-800">
+            <h2 className="text-2xl font-bold text-teal-800">
               Email Verified!
             </h2>
-            <p className="mt-2 text-green-600">
+            <p className="mt-2 text-teal-600">
               Your email has been successfully verified.
             </p>
             <p className="mt-4 text-gray-600">
@@ -195,15 +195,15 @@ const VerifyEmailPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full">
         <div className="bg-white shadow-xl rounded-2xl overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-8">
+          <div className="bg-gradient-to-r from-teal-400 to-blue-400 px-6 py-8">
             <div className="text-center">
               <div className="flex justify-center">
                 <div className="h-16 w-16 bg-white rounded-full flex items-center justify-center shadow-md">
                   <svg
-                    className="h-8 w-8 text-blue-600"
+                    className="h-8 w-8 text-teal-500"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -234,7 +234,7 @@ const VerifyEmailPage: React.FC = () => {
                 </p>
                 <button
                   onClick={() => navigate("/register")}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"
+                  className="px-4 py-2 bg-gradient-to-r from-teal-500 to-blue-400 text-white rounded-lg shadow-sm hover:from-teal-600 hover:to-blue-500 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors duration-200"
                 >
                   Go to Registration
                 </button>
@@ -257,7 +257,7 @@ const VerifyEmailPage: React.FC = () => {
                         ref={(el) => (inputRefs.current[index] = el)}
                         type="text"
                         maxLength={1}
-                        className="w-full h-12 text-center text-xl font-bold border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        className="w-full h-12 text-center text-xl font-bold border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 transition-all duration-200"
                         value={verificationCode[index]}
                         onChange={(e) =>
                           handleInputChange(index, e.target.value)
@@ -277,9 +277,9 @@ const VerifyEmailPage: React.FC = () => {
                     disabled={loading || verificationCode.join("").length !== 6}
                     className={`group relative w-full flex justify-center py-2 px-4 border border-transparent rounded-lg text-white ${
                       loading || verificationCode.join("").length !== 6
-                        ? "bg-blue-400"
-                        : "bg-blue-600 hover:bg-blue-700"
-                    } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200`}
+                        ? "bg-teal-400 cursor-not-allowed"
+                        : "bg-gradient-to-r from-teal-500 to-blue-400 hover:from-teal-600 hover:to-blue-500"
+                    } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-colors duration-200`}
                   >
                     {loading ? (
                       <div className="flex items-center">
@@ -321,7 +321,7 @@ const VerifyEmailPage: React.FC = () => {
                     className={`mt-2 text-sm font-medium ${
                       resendDisabled
                         ? "text-gray-400 cursor-not-allowed"
-                        : "text-blue-600 hover:text-blue-500"
+                        : "text-teal-600 hover:text-teal-500"
                     }`}
                   >
                     {resendDisabled

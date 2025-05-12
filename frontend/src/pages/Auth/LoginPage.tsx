@@ -139,9 +139,9 @@ const LoginPage: React.FC = () => {
   // If we're still checking authentication status, show a loading indicator
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-blue-50">
         <div className="flex flex-col items-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-teal-500"></div>
           <p className="mt-4 text-gray-600">Checking authentication...</p>
         </div>
       </div>
@@ -151,9 +151,9 @@ const LoginPage: React.FC = () => {
   // Only render the login form if not authenticated
   if (isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-blue-50">
         <div className="flex flex-col items-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-teal-500"></div>
           <p className="mt-4 text-gray-600">
             You are already logged in. Redirecting...
           </p>
@@ -165,7 +165,7 @@ const LoginPage: React.FC = () => {
   // Show 2FA verification screen if required
   if (is2FARequired) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
         <TOTPVerification
           onVerify={handleTOTPVerification}
           onCancel={handleCancelTOTP}
@@ -177,15 +177,15 @@ const LoginPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full">
         <div className="bg-white shadow-xl rounded-2xl overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-8">
+          <div className="bg-gradient-to-r from-teal-400 to-blue-400 px-6 py-8">
             <div className="text-center">
               <div className="flex justify-center">
                 <div className="h-16 w-16 bg-white rounded-full flex items-center justify-center shadow-md">
                   <svg
-                    className="h-8 w-8 text-blue-600"
+                    className="h-8 w-8 text-teal-500"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -248,7 +248,7 @@ const LoginPage: React.FC = () => {
                     type="email"
                     autoComplete="email"
                     required
-                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 transition-all duration-200"
                     placeholder="Enter your email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -285,7 +285,7 @@ const LoginPage: React.FC = () => {
                     type={showPassword ? "text" : "password"}
                     autoComplete="current-password"
                     required
-                    className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 transition-all duration-200"
                     placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -342,7 +342,7 @@ const LoginPage: React.FC = () => {
                     id="remember-me"
                     name="remember-me"
                     type="checkbox"
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
                   />
                   <label
                     htmlFor="remember-me"
@@ -355,7 +355,7 @@ const LoginPage: React.FC = () => {
                 <div className="text-sm">
                   <Link
                     to="/forgot-password"
-                    className="font-medium text-blue-600 hover:text-blue-500"
+                    className="font-medium text-teal-600 hover:text-teal-500"
                   >
                     Forgot your password?
                   </Link>
@@ -367,8 +367,10 @@ const LoginPage: React.FC = () => {
                   type="submit"
                   disabled={loading}
                   className={`group relative w-full flex justify-center py-2 px-4 border border-transparent rounded-lg text-white ${
-                    loading ? "bg-blue-400" : "bg-blue-600 hover:bg-blue-700"
-                  } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200`}
+                    loading
+                      ? "bg-teal-400 cursor-not-allowed"
+                      : "bg-gradient-to-r from-teal-500 to-blue-400 hover:from-teal-600 hover:to-blue-500"
+                  } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-colors duration-200`}
                 >
                   {loading ? (
                     <div className="flex items-center">
@@ -415,7 +417,7 @@ const LoginPage: React.FC = () => {
               <div className="mt-6">
                 <Link
                   to="/register"
-                  className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                  className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-colors duration-200"
                 >
                   Create a new account
                 </Link>

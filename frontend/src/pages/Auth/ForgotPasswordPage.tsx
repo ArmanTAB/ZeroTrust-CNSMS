@@ -56,11 +56,11 @@ const ForgotPasswordPage: React.FC = () => {
 
   if (isSubmitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full bg-white shadow-xl rounded-2xl overflow-hidden">
-          <div className="bg-green-100 p-6 text-center">
+          <div className="bg-teal-100 p-6 text-center">
             <div className="flex justify-center mb-4">
-              <div className="h-16 w-16 bg-green-500 rounded-full flex items-center justify-center shadow-md">
+              <div className="h-16 w-16 bg-teal-500 rounded-full flex items-center justify-center shadow-md">
                 <svg
                   className="h-8 w-8 text-white"
                   fill="none"
@@ -76,10 +76,10 @@ const ForgotPasswordPage: React.FC = () => {
                 </svg>
               </div>
             </div>
-            <h2 className="text-2xl font-bold text-green-800">
+            <h2 className="text-2xl font-bold text-teal-800">
               Reset Email Sent!
             </h2>
-            <p className="mt-2 text-green-600">
+            <p className="mt-2 text-teal-600">
               If an account exists for {email}, we've sent instructions to reset
               your password.
             </p>
@@ -93,15 +93,15 @@ const ForgotPasswordPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full">
         <div className="bg-white shadow-xl rounded-2xl overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-8">
+          <div className="bg-gradient-to-r from-teal-400 to-blue-400 px-6 py-8">
             <div className="text-center">
               <div className="flex justify-center">
                 <div className="h-16 w-16 bg-white rounded-full flex items-center justify-center shadow-md">
                   <svg
-                    className="h-8 w-8 text-blue-600"
+                    className="h-8 w-8 text-teal-500"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -155,7 +155,7 @@ const ForgotPasswordPage: React.FC = () => {
                     type="email"
                     autoComplete="email"
                     required
-                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 transition-all duration-200"
                     placeholder="Enter your email address"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -169,9 +169,9 @@ const ForgotPasswordPage: React.FC = () => {
                   disabled={loading}
                   className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-white ${
                     loading
-                      ? "bg-blue-400 cursor-not-allowed"
-                      : "bg-blue-600 hover:bg-blue-700"
-                  } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200`}
+                      ? "bg-teal-400 cursor-not-allowed"
+                      : "bg-gradient-to-r from-teal-500 to-blue-400 hover:from-teal-600 hover:to-blue-500"
+                  } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-colors duration-200`}
                 >
                   {loading ? (
                     <div className="flex items-center">
@@ -205,7 +205,7 @@ const ForgotPasswordPage: React.FC = () => {
               <div className="flex items-center justify-center">
                 <Link
                   to="/login"
-                  className="text-sm font-medium text-blue-600 hover:text-blue-500"
+                  className="text-sm font-medium text-teal-600 hover:text-teal-500"
                 >
                   Back to Login
                 </Link>
