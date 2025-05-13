@@ -59,7 +59,7 @@ const GoogleDrivePage: React.FC = () => {
               About Zero Trust Google Drive Access
             </h2>
             <p className="text-gray-600 mt-1">
-              This page allows you to request and manage access to protected
+              This page allows to manage accesses to protected
               Google Drive folders using Zero Trust security principles. All
               access is granted on a least-privilege, time-limited basis with
               continuous verification.
@@ -76,7 +76,7 @@ const GoogleDrivePage: React.FC = () => {
               <h3 className="ml-2 font-medium text-gray-800">Request Access</h3>
             </div>
             <p className="text-sm text-gray-600">
-              Browse available folders and request access based on your work
+              Browse available folders and accesses based on work
               requirements.
             </p>
           </div>
