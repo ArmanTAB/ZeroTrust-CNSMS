@@ -179,19 +179,17 @@ const AuthApi = {
     return response.data;
   },
 
-  /**
-   * Login with 2FA
-   */
   loginWith2FA: async (
     email: string,
     password: string,
-    totpToken: string
+    totpToken: string,
+    method: "totp" | "email_otp" = "totp"
   ): Promise<AuthResponse> => {
     // Create formData to maintain compatibility with backend
     const formData = new URLSearchParams();
     formData.append("username", email);
     formData.append("password", password);
-    formData.append("scope", `totp:${totpToken}`); // Use scope to send the token
+    formData.append("scope", `${method}:${totpToken}`); // Use scope to send the token and method
 
     const response = await api.post<AuthResponse>(
       "/auth/token",
@@ -203,6 +201,31 @@ const AuthApi = {
       }
     );
 
+    return response.data;
+  },
+
+  setupEmailOTP: async (): Promise<any> => {
+    const response = await api.post<any>("/auth/email-otp/setup");
+    return response.data;
+  },
+
+  verifyEmailOTP: async (token: string): Promise<any> => {
+    const response = await api.post<any>("/auth/email-otp/verify", { token });
+    return response.data;
+  },
+
+  disableEmailOTP: async (): Promise<any> => {
+    const response = await api.post<any>("/auth/email-otp/disable");
+    return response.data;
+  },
+
+  getEmailOTPStatus: async (): Promise<any> => {
+    const response = await api.get<any>("/auth/email-otp/status");
+    return response.data;
+  },
+
+  sendEmailOTP: async (email: string): Promise<any> => {
+    const response = await api.post<any>("/auth/email-otp/send", { email });
     return response.data;
   },
 };

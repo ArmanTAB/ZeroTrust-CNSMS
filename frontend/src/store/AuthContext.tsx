@@ -18,7 +18,8 @@ interface AuthContextType {
   loginWith2FA: (
     email: string,
     password: string,
-    totpToken: string
+    totpToken: string,
+    method: "totp" | "email_otp",
   ) => Promise<void>;
   logout: () => void;
   clearError: () => void;
@@ -109,13 +110,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const loginWith2FA = async (
     email: string,
     password: string,
-    totpToken: string
+    totpToken: string,
+    method: "totp" | "email_otp" = "totp"
   ) => {
     setLoading(true);
     setError(null); // Clear previous errors
 
     try {
-      const auth = await AuthApi.loginWith2FA(email, password, totpToken);
+      const auth = await AuthApi.loginWith2FA(
+        email,
+        password,
+        totpToken,
+        method
+      );
       localStorage.setItem("token", auth.access_token);
 
       // Get user information after successful login

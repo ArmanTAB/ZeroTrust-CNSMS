@@ -5,6 +5,7 @@ import { useAuth } from "../../store/AuthContext";
 import { useToast } from "../../store/ToastContext";
 import AuthApi from "../../api/auth.api";
 import TOTPVerification from "../../components/Auth/TOTPVerification";
+import EmailOTPVerification from "../../components/Auth/EmailOTPVerification";
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -15,7 +16,14 @@ const LoginPage: React.FC = () => {
 
   // New state variables for 2FA
   const [is2FARequired, setIs2FARequired] = useState(false);
+  const [isEmailOTPRequired, setIsEmailOTPRequired] = useState(false);
+  const [show2FAMethod, setShow2FAMethod] = useState<
+    "totp" | "email_otp" | null
+  >(null);
   const [totpError, setTotpError] = useState<string | undefined>(undefined);
+  const [emailOTPError, setEmailOTPError] = useState<string | undefined>(
+    undefined
+  );
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -68,9 +76,17 @@ const LoginPage: React.FC = () => {
       // First, check if 2FA is required
       const checkResult = await AuthApi.check2FARequired(email, password);
 
-      if (checkResult.totp_required) {
-        // If 2FA is required, show the verification screen
-        setIs2FARequired(true);
+      if (checkResult.totp_required || checkResult.email_otp_required) {
+        setIs2FARequired(checkResult.totp_required);
+        setIsEmailOTPRequired(checkResult.email_otp_required);
+
+        // If both methods are enabled, default to TOTP
+        if (checkResult.totp_required) {
+          setShow2FAMethod("totp");
+        } else if (checkResult.email_otp_required) {
+          setShow2FAMethod("email_otp");
+        }
+
         setLoading(false);
         return;
       }
@@ -116,8 +132,8 @@ const LoginPage: React.FC = () => {
     setTotpError(undefined);
 
     try {
-      // Login with 2FA
-      await loginWith2FA(email, password, code);
+      // Login with 2FA using TOTP method
+      await loginWith2FA(email, password, code, "totp");
       showToast("You have successfully logged in!", "success");
 
       // Navigation will be handled by the useEffect hook
@@ -134,6 +150,49 @@ const LoginPage: React.FC = () => {
   const handleCancelTOTP = () => {
     setIs2FARequired(false);
     setTotpError(undefined);
+  };
+
+  const handleEmailOTPVerification = async (code: string) => {
+    setLoading(true);
+    setEmailOTPError(undefined);
+
+    try {
+      // Login with 2FA using Email OTP method
+      await loginWith2FA(email, password, code, "email_otp");
+      showToast("You have successfully logged in!", "success");
+
+      // Navigation will be handled by the useEffect hook
+    } catch (err: any) {
+      console.error("Email OTP verification error:", err);
+      setEmailOTPError(err.message || "Invalid verification code");
+      showToast(err.message || "Invalid verification code", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendEmailOTP = async () => {
+    try {
+      await AuthApi.sendEmailOTP(email);
+      showToast("Verification code has been resent to your email", "success");
+    } catch (err: any) {
+      console.error("Error resending email OTP:", err);
+      showToast("Failed to resend verification code", "error");
+    }
+  };
+
+  // Handler to switch between 2FA methods
+  const handleSwitch2FAMethod = (method: "totp" | "email_otp") => {
+    setShow2FAMethod(method);
+    setTotpError(undefined);
+    setEmailOTPError(undefined);
+  };
+
+  // Handler to go back to the login screen from 2FA
+  const handleCancel2FA = () => {
+    setShow2FAMethod(null);
+    setTotpError(undefined);
+    setEmailOTPError(undefined);
   };
 
   // If we're still checking authentication status, show a loading indicator
@@ -163,15 +222,53 @@ const LoginPage: React.FC = () => {
   }
 
   // Show 2FA verification screen if required
-  if (is2FARequired) {
+  if (show2FAMethod === "totp") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
-        <TOTPVerification
-          onVerify={handleTOTPVerification}
-          onCancel={handleCancelTOTP}
-          isLoading={loading}
-          error={totpError}
-        />
+        <div className="max-w-md w-full">
+          <TOTPVerification
+            onVerify={handleTOTPVerification}
+            onCancel={handleCancel2FA}
+            isLoading={loading}
+            error={totpError}
+          />
+          {isEmailOTPRequired && (
+            <div className="mt-4 text-center">
+              <button
+                onClick={() => handleSwitch2FAMethod("email_otp")}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                Use email verification instead
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (show2FAMethod === "email_otp") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full">
+          <EmailOTPVerification
+            onVerify={handleEmailOTPVerification}
+            onResend={handleResendEmailOTP}
+            onCancel={handleCancel2FA}
+            isLoading={loading}
+            error={emailOTPError}
+          />
+          {is2FARequired && (
+            <div className="mt-4 text-center">
+              <button
+                onClick={() => handleSwitch2FAMethod("totp")}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                Use authenticator app instead
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     );
   }

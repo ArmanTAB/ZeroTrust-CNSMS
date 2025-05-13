@@ -1,5 +1,5 @@
 # backend/app/auth/routes.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
@@ -10,6 +10,7 @@ from .utils import (
     verify_user_email, resend_verification_email, request_password_reset,
     reset_password
 )
+from .email_otp import generate_email_otp, verify_email_otp, disable_email_otp, is_email_otp_enabled
 from .models import (
     UserCreate, UserLogin, User, Token, UserInDB, 
     VerificationRequest, ResendVerificationRequest,
@@ -18,6 +19,7 @@ from .models import (
 from ..db import db
 import logging
 from .totp import generate_totp_secret, verify_totp, disable_totp, is_totp_enabled
+from bson.objectid import ObjectId
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -95,26 +97,39 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
             detail="Email not verified. Please verify your email before logging in."
         )
     
-    # Check if 2FA is enabled
-    if user.get("totp_enabled", False):
-        # Extract the token from the password field or another field
-        # In a real implementation, you'd want a separate field for the token
-        # For now, we'll check if there's a token in the OAuth form
-        totp_token = None
-        for param in form_data.scopes:  # Using scopes field to pass the token
+    # Check if 2FA is enabled (either TOTP or email OTP)
+    totp_enabled = user.get("totp_enabled", False)
+    email_otp_enabled = user.get("email_otp_enabled", False)
+    
+    if totp_enabled or email_otp_enabled:
+        # Extract the token from the scopes field
+        auth_token = None
+        auth_type = None
+        
+        for param in form_data.scopes:
             if param.startswith("totp:"):
-                totp_token = param.split(":", 1)[1]
+                auth_token = param.split(":", 1)[1]
+                auth_type = "totp"
+                break
+            elif param.startswith("email_otp:"):
+                auth_token = param.split(":", 1)[1]
+                auth_type = "email_otp"
                 break
         
-        if not totp_token:
+        if not auth_token:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="2FA token required",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
-        # Verify the token
-        is_valid = await verify_totp(str(user["_id"]), totp_token)
+        # Verify the token based on the type
+        is_valid = False
+        if auth_type == "totp" and totp_enabled:
+            is_valid = await verify_totp(str(user["_id"]), auth_token)
+        elif auth_type == "email_otp" and email_otp_enabled:
+            is_valid = await verify_email_otp(str(user["_id"]), auth_token)
+        
         if not is_valid:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -135,7 +150,7 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
         expires_delta=access_token_expires
     )
     
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer"}   
 
 # Add an additional endpoint for 2FA authentication
 @router.post("/login/2fa-check", response_model=dict)
@@ -164,13 +179,22 @@ async def check_2fa_required(login_data: dict):
             detail="Email not verified. Please verify your email before logging in."
         )
     
-    # Check if 2FA is enabled
+    # Check if 2FA is enabled (either TOTP or email OTP)
     totp_enabled = user.get("totp_enabled", False)
+    email_otp_enabled = user.get("email_otp_enabled", False)
+    
+    # If email OTP is enabled, send the OTP now
+    if email_otp_enabled:
+        try:
+            await generate_email_otp(str(user["_id"]))
+        except Exception as e:
+            logger.error(f"Failed to send email OTP during login check: {str(e)}")
     
     return {
         "totp_required": totp_enabled,
+        "email_otp_required": email_otp_enabled,
         "email": email,
-        "user_id": str(user["_id"]) if totp_enabled else None
+        "user_id": str(user["_id"]) if (totp_enabled or email_otp_enabled) else None
     }
 
 @router.get("/me", response_model=User)
@@ -362,3 +386,131 @@ async def get_totp_status(current_user: Annotated[User, Depends(get_current_user
     return {
         "totp_enabled": is_enabled
     }
+
+@router.post("/email-otp/setup", response_model=dict)
+async def setup_email_otp(current_user: Annotated[User, Depends(get_current_user)]):
+    """Set up email OTP for a user"""
+    if await is_email_otp_enabled(current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email OTP is already enabled for this user"
+        )
+    
+    try:
+        # Generate and send OTP
+        otp = await generate_email_otp(current_user.id)
+        
+        # Enable email OTP for the user
+        await db.db.users.update_one(
+            {"_id": ObjectId(current_user.id)},
+            {"$set": {
+                "email_otp_enabled": True
+            }}
+        )
+        
+        return {
+            "status": "success",
+            "message": "OTP sent to your email. Please verify to complete setup."
+        }
+    except Exception as e:
+        logger.error(f"Error setting up email OTP: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to set up email OTP: {str(e)}"
+        )
+
+@router.post("/email-otp/verify", response_model=dict)
+async def verify_email_otp_endpoint(
+    current_user: Annotated[User, Depends(get_current_user)],
+    token_data: dict
+):
+    """Verify an email OTP token"""
+    token = token_data.get("token")
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token is required"
+        )
+    
+    is_valid = await verify_email_otp(current_user.id, token)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired token"
+        )
+    
+    return {
+        "status": "success",
+        "message": "Email OTP verified and enabled",
+        "email_otp_enabled": True
+    }
+
+@router.post("/email-otp/disable", response_model=dict)
+async def disable_email_otp_endpoint(current_user: Annotated[User, Depends(get_current_user)]):
+    """Disable email OTP for a user"""
+    is_enabled = await is_email_otp_enabled(current_user.id)
+    
+    if not is_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email OTP is not enabled for this user"
+        )
+    
+    success = await disable_email_otp(current_user.id)
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to disable email OTP"
+        )
+    
+    return {
+        "status": "success",
+        "message": "Email OTP disabled",
+        "email_otp_enabled": False
+    }
+
+@router.get("/email-otp/status", response_model=dict)
+async def get_email_otp_status(current_user: Annotated[User, Depends(get_current_user)]):
+    """Check if email OTP is enabled for a user"""
+    is_enabled = await is_email_otp_enabled(current_user.id)
+    return {
+        "email_otp_enabled": is_enabled
+    }
+
+@router.post("/email-otp/send", response_model=dict)
+async def send_email_otp(email: str = Body(..., embed=True)):
+    """Send an email OTP for login"""
+    # Find user by email
+    user = await get_user_by_email(email)
+    
+    if not user:
+        # For security reasons, don't reveal that the user doesn't exist
+        return {
+            "status": "success",
+            "message": "If your email is registered and email OTP is enabled, a code has been sent to your email"
+        }
+    
+    # Check if email OTP is enabled for the user
+    if not user.get("email_otp_enabled", False):
+        return {
+            "status": "success",
+            "message": "If your email is registered and email OTP is enabled, a code has been sent to your email"
+        }
+    
+    try:
+        # Send OTP
+        otp = await generate_email_otp(str(user["_id"]))
+        
+        return {
+            "status": "success",
+            "message": "If your email is registered and email OTP is enabled, a code has been sent to your email",
+            "user_id": str(user["_id"])
+        }
+    except Exception as e:
+        logger.error(f"Error sending email OTP: {str(e)}", exc_info=True)
+        # Return success anyway for security reasons
+        return {
+            "status": "success",
+            "message": "If your email is registered and email OTP is enabled, a code has been sent to your email"
+        }

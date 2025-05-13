@@ -236,3 +236,18 @@ export interface TOTPSetupResponse {
 export interface TOTPStatusResponse {
   totp_enabled: boolean;
 }
+
+export interface EmailOTPStatusResponse {
+  email_otp_enabled: boolean;
+}
+
+export interface EmailOTPSetupResponse {
+  status: string;
+  message: string;
+}
+
+export interface EmailOTPVerifyResponse {
+  status: string;
+  message: string;
+  email_otp_enabled: boolean;
+}

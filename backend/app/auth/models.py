@@ -38,7 +38,12 @@ class UserInDB(BaseModel):
     totp_verified: bool = False
     totp_created_at: Optional[datetime] = None
     totp_verified_at: Optional[datetime] = None
-    
+    email_otp: Optional[str] = None
+    email_otp_expiry: Optional[datetime] = None
+    email_otp_created_at: Optional[datetime] = None
+    email_otp_enabled: bool = False
+    email_otp_verified: bool = False
+    email_otp_verified_at: Optional[datetime] = None
     model_config = {
         "populate_by_name": True
     }
