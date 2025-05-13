@@ -575,6 +575,118 @@ const AccessLogsPage: React.FC = () => {
     }
   };
 
+  // First, add a function to convert your logs to CSV format and download it
+
+  const exportLogsToCSV = () => {
+    // Show loading state
+    const originalButtonText =
+      document.getElementById("exportButton")?.innerText;
+    if (document.getElementById("exportButton")) {
+      document.getElementById("exportButton")!.innerText = "Exporting...";
+    }
+
+    try {
+      // Use all logs instead of just the paginated ones
+      const logsToExport = allLogs;
+
+      if (logsToExport.length === 0) {
+        showToast("No logs to export", "warning");
+        return;
+      }
+
+      if (logsToExport.length > 0) {
+        if (
+          !window.confirm(
+            `You are about to export ${logsToExport.length} logs. This may take a while. Continue?`
+          )
+        ) {
+          return;
+        }
+      }
+
+      // Define CSV headers based on all possible fields
+      const headers = [
+        "Time",
+        "Type",
+        "User Email",
+        "Device ID",
+        "IP Address",
+        "Resource",
+        "Access Type",
+        "Status",
+        "Access Granted",
+        "Risk Level",
+        "Reason",
+        "Folder Name",
+        "Decision Time",
+        "Decision By",
+      ];
+
+      // Create CSV content
+      let csvContent = headers.join(",") + "\n";
+
+      // Add data rows
+      logsToExport.forEach((log) => {
+        const row = [
+          // Format date for better readability in CSV
+          new Date(log.timestamp).toLocaleString(),
+          log.log_type,
+          log.user_email || "",
+          log.device_id || "",
+          log.ip_address || "",
+          // Escape any commas in the resource field to prevent breaking CSV format
+          `"${log.resource.replace(/"/g, '""')}"`,
+          log.access_type || "",
+          log.status || "",
+          log.access_granted.toString(),
+          log.risk_level?.toString() || "",
+          // Escape any commas in the reason field
+          log.reason ? `"${log.reason.replace(/"/g, '""')}"` : "",
+          log.folder_name ? `"${log.folder_name.replace(/"/g, '""')}"` : "",
+          log.decision_time ? new Date(log.decision_time).toLocaleString() : "",
+          log.decision_by_email || "",
+        ];
+
+        csvContent += row.join(",") + "\n";
+      });
+
+      // Create a Blob with the CSV content
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+
+      // Create a URL for the Blob
+      const url = URL.createObjectURL(blob);
+
+      // Create a download link
+      const link = document.createElement("a");
+      link.href = url;
+
+      // Set filename with current date
+      const now = new Date();
+      const filename = `access_logs_export_${now.getFullYear()}-${(
+        now.getMonth() + 1
+      )
+        .toString()
+        .padStart(2, "0")}-${now.getDate().toString().padStart(2, "0")}.csv`;
+      link.setAttribute("download", filename);
+
+      // Append link, trigger click, then remove
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Show success message
+      showToast(`Exported ${logsToExport.length} logs to CSV`, "success");
+    } catch (error) {
+      console.error("Error exporting logs:", error);
+      showToast("Failed to export logs", "error");
+    } finally {
+      // Reset button text
+      if (document.getElementById("exportButton")) {
+        document.getElementById("exportButton")!.innerText =
+          originalButtonText || "Export Logs";
+      }
+    }
+  };
   return (
     <MainLayout>
       <div className="mb-6">
@@ -587,7 +699,12 @@ const AccessLogsPage: React.FC = () => {
             </p>
           </div>
           <div className="mt-4 sm:mt-0">
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 flex items-center">
+            <button
+              id="exportButton"
+              onClick={exportLogsToCSV}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 flex items-center"
+              disabled={loading || allLogs.length === 0}
+            >
               <svg
                 className="w-5 h-5 mr-2"
                 fill="none"
