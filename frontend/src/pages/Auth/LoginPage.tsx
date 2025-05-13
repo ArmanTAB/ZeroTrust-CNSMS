@@ -5,6 +5,8 @@ import { useAuth } from "../../store/AuthContext";
 import { useToast } from "../../store/ToastContext";
 import AuthApi from "../../api/auth.api";
 import TOTPVerification from "../../components/Auth/TOTPVerification";
+import { TwoFactorMethod } from "../../types";
+import TwilioVerification from "../../components/Auth/TwilioVerification";
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -12,7 +14,10 @@ const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
+  const [verificationMethod, setVerificationMethod] = useState<TwoFactorMethod>(
+    TwoFactorMethod.TOTP
+  );
+  const [phoneNumber, setPhoneNumber] = useState<string | undefined>(undefined);
   // New state variables for 2FA
   const [is2FARequired, setIs2FARequired] = useState(false);
   const [totpError, setTotpError] = useState<string | undefined>(undefined);
@@ -68,8 +73,23 @@ const LoginPage: React.FC = () => {
       // First, check if 2FA is required
       const checkResult = await AuthApi.check2FARequired(email, password);
 
-      if (checkResult.totp_required) {
-        // If 2FA is required, show the verification screen
+      if (
+        checkResult.totp_required ||
+        checkResult.sms_required ||
+        checkResult.whatsapp_required
+      ) {
+        // Set the preferred 2FA method
+        setVerificationMethod(checkResult.preferred_method);
+
+        // Save phone number if it's SMS or WhatsApp
+        if (
+          checkResult.preferred_method === TwoFactorMethod.SMS ||
+          checkResult.preferred_method === TwoFactorMethod.WHATSAPP
+        ) {
+          setPhoneNumber(checkResult.phone_number);
+        }
+
+        // Show verification screen
         setIs2FARequired(true);
         setLoading(false);
         return;
@@ -110,14 +130,13 @@ const LoginPage: React.FC = () => {
     }
   };
 
-  // Handler for 2FA verification
   const handleTOTPVerification = async (code: string) => {
     setLoading(true);
     setTotpError(undefined);
 
     try {
       // Login with 2FA
-      await loginWith2FA(email, password, code);
+      await loginWith2FA(email, password, code, verificationMethod);
       showToast("You have successfully logged in!", "success");
 
       // Navigation will be handled by the useEffect hook
@@ -127,6 +146,19 @@ const LoginPage: React.FC = () => {
       showToast(err.message || "Invalid verification code", "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendTwilioCode = async () => {
+    try {
+      await AuthApi.sendTwilioCode(verificationMethod);
+      showToast(
+        `Verification code resent via ${verificationMethod}`,
+        "success"
+      );
+    } catch (err: any) {
+      console.error("Failed to resend code:", err);
+      showToast(err.message || "Failed to resend code", "error");
     }
   };
 
@@ -164,16 +196,33 @@ const LoginPage: React.FC = () => {
 
   // Show 2FA verification screen if required
   if (is2FARequired) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
-        <TOTPVerification
-          onVerify={handleTOTPVerification}
-          onCancel={handleCancelTOTP}
-          isLoading={loading}
-          error={totpError}
-        />
-      </div>
-    );
+    if (verificationMethod === TwoFactorMethod.TOTP) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
+          <TOTPVerification
+            onVerify={handleTOTPVerification}
+            onCancel={handleCancelTOTP}
+            isLoading={loading}
+            error={totpError}
+          />
+        </div>
+      );
+    } else {
+      // SMS or WhatsApp verification
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
+          <TwilioVerification
+            method={verificationMethod}
+            phoneNumber={phoneNumber}
+            onVerify={handleTOTPVerification}
+            onCancel={handleCancelTOTP}
+            onResend={handleResendTwilioCode}
+            isLoading={loading}
+            error={totpError}
+          />
+        </div>
+      );
+    }
   }
 
   return (

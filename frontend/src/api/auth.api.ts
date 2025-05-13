@@ -12,6 +12,8 @@ import {
   PasswordResetVerifyRequest,
   TOTPSetupResponse,
   TOTPStatusResponse,
+  TwoFactorMethod,
+  Auth2FAResponse,
 } from "../types";
 
 const AuthApi = {
@@ -168,30 +170,23 @@ const AuthApi = {
     return response.data;
   },
 
-  /**
-   * Check if 2FA is required for login
-   */
-  check2FARequired: async (email: string, password: string): Promise<any> => {
-    const response = await api.post<any>("/auth/login/2fa-check", {
-      email,
-      password,
-    });
-    return response.data;
-  },
-
-  /**
-   * Login with 2FA
-   */
   loginWith2FA: async (
     email: string,
     password: string,
-    totpToken: string
+    totpToken: string,
+    method: TwoFactorMethod = TwoFactorMethod.TOTP
   ): Promise<AuthResponse> => {
     // Create formData to maintain compatibility with backend
     const formData = new URLSearchParams();
     formData.append("username", email);
     formData.append("password", password);
-    formData.append("scope", `totp:${totpToken}`); // Use scope to send the token
+
+    // Use scope to send the token with the appropriate prefix
+    if (method === TwoFactorMethod.TOTP) {
+      formData.append("scope", `totp:${totpToken}`);
+    } else {
+      formData.append("scope", `twilio:${totpToken}`);
+    }
 
     const response = await api.post<AuthResponse>(
       "/auth/token",
@@ -203,6 +198,67 @@ const AuthApi = {
       }
     );
 
+    return response.data;
+  },
+
+  setupPhoneVerification: async (
+    phone_number: string,
+    method: TwoFactorMethod
+  ): Promise<any> => {
+    const response = await api.post<any>("/auth/twilio/setup", {
+      phone_number,
+      method,
+    });
+    return response.data;
+  },
+
+  verifyPhoneNumber: async (
+    phone_number: string,
+    code: string,
+    method: TwoFactorMethod
+  ): Promise<any> => {
+    const response = await api.post<any>("/auth/twilio/verify", {
+      phone_number,
+      code,
+      method,
+    });
+    return response.data;
+  },
+
+  sendTwilioCode: async (method: TwoFactorMethod): Promise<any> => {
+    const response = await api.post<any>("/auth/twilio/send-code", {
+      method,
+    });
+    return response.data;
+  },
+
+  updatePreferred2FAMethod: async (method: TwoFactorMethod): Promise<any> => {
+    const response = await api.post<any>("/auth/2fa/method", {
+      method,
+    });
+    return response.data;
+  },
+
+  disable2FAMethod: async (method: TwoFactorMethod): Promise<any> => {
+    const response = await api.post<any>("/auth/2fa/disable", {
+      method,
+    });
+    return response.data;
+  },
+  get2FAStatus: async (): Promise<TOTPStatusResponse> => {
+    const response = await api.get<TOTPStatusResponse>("/auth/totp/status");
+    return response.data;
+  },
+
+  // Update the existing check2FARequired function
+  check2FARequired: async (
+    email: string,
+    password: string
+  ): Promise<Auth2FAResponse> => {
+    const response = await api.post<Auth2FAResponse>("/auth/login/2fa-check", {
+      email,
+      password,
+    });
     return response.data;
   },
 };

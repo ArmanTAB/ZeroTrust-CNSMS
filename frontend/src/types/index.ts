@@ -16,7 +16,12 @@ export interface User {
   created_at: string;
   last_login?: string;
   is_active: boolean;
-  is_verified: boolean; // Added verification status
+  is_verified: boolean;
+  phone_number?: string;
+  phone_verified?: boolean;
+  sms_enabled?: boolean;
+  whatsapp_enabled?: boolean;
+  preferred_2fa_method?: TwoFactorMethod;
 }
 
 export interface LoginCredentials {
@@ -235,4 +240,25 @@ export interface TOTPSetupResponse {
 
 export interface TOTPStatusResponse {
   totp_enabled: boolean;
+  sms_enabled?: boolean;
+  whatsapp_enabled?: boolean;
+  preferred_method?: TwoFactorMethod;
+  phone_number?: string;
+}
+
+export enum TwoFactorMethod {
+  NONE = "none",
+  TOTP = "totp",
+  SMS = "sms",
+  WHATSAPP = "whatsapp"
+}
+
+export interface Auth2FAResponse {
+  totp_required: boolean;
+  sms_required: boolean;
+  whatsapp_required: boolean;
+  preferred_method: TwoFactorMethod;
+  email: string;
+  user_id: string;
+  phone_number?: string;
 }

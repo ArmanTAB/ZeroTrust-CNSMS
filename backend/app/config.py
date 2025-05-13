@@ -21,4 +21,10 @@ class Settings(BaseModel):
     VERIFICATION_CODE_LENGTH: int = 6
     VERIFICATION_CODE_EXPIRY_HOURS: int = 24
     
+    # Twilio configuration
+    TWILIO_ACCOUNT_SID: str = os.getenv("TWILIO_ACCOUNT_SID", "")
+    TWILIO_AUTH_TOKEN: str = os.getenv("TWILIO_AUTH_TOKEN", "")
+    TWILIO_PHONE_NUMBER: str = os.getenv("TWILIO_PHONE_NUMBER", "")
+    TWILIO_WHATSAPP_NUMBER: str = os.getenv("TWILIO_WHATSAPP_NUMBER", "")
+    
 settings = Settings()

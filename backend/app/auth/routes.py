@@ -8,12 +8,12 @@ from ..config import settings
 from .utils import (
     verify_password, create_access_token, get_user_by_email, create_user,
     verify_user_email, resend_verification_email, request_password_reset,
-    reset_password
+    reset_password, setup_phone_verification
 )
 from .models import (
     UserCreate, UserLogin, User, Token, UserInDB, 
-    VerificationRequest, ResendVerificationRequest,
-    PasswordResetRequest, ResetPasswordRequest
+    VerificationRequest, ResendVerificationRequest, TwoFactorMethod,
+    PasswordResetRequest, ResetPasswordRequest, PhoneVerificationRequest, PhoneVerificationVerify, TwoFactorMethodUpdate
 )
 from ..db import db
 import logging
@@ -95,26 +95,40 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
             detail="Email not verified. Please verify your email before logging in."
         )
     
-    # Check if 2FA is enabled
-    if user.get("totp_enabled", False):
-        # Extract the token from the password field or another field
-        # In a real implementation, you'd want a separate field for the token
-        # For now, we'll check if there's a token in the OAuth form
+    # Check if any 2FA method is enabled
+    totp_enabled = user.get("totp_enabled", False)
+    sms_enabled = user.get("sms_enabled", False)
+    whatsapp_enabled = user.get("whatsapp_enabled", False)
+    preferred_method = user.get("preferred_2fa_method", TwoFactorMethod.NONE)
+    
+    if (totp_enabled or sms_enabled or whatsapp_enabled):
+        # Extract the token from the scopes (using scopes field to pass the token)
         totp_token = None
-        for param in form_data.scopes:  # Using scopes field to pass the token
+        for param in form_data.scopes:
             if param.startswith("totp:"):
+                totp_token = param.split(":", 1)[1]
+                break
+            elif param.startswith("twilio:"):
                 totp_token = param.split(":", 1)[1]
                 break
         
         if not totp_token:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="2FA token required",
-                headers={"WWW-Authenticate": "Bearer"},
+                detail=f"2FA token required. Preferred method: {preferred_method}",
+                headers={
+                    "WWW-Authenticate": "Bearer",
+                    "X-2FA-Method": preferred_method
+                },
             )
         
-        # Verify the token
-        is_valid = await verify_totp(str(user["_id"]), totp_token)
+        # Verify the token based on preferred method
+        is_valid = False
+        if preferred_method == TwoFactorMethod.TOTP and totp_enabled:
+            is_valid = await verify_totp(str(user["_id"]), totp_token)
+        elif (preferred_method == TwoFactorMethod.SMS or preferred_method == TwoFactorMethod.WHATSAPP) and (sms_enabled or whatsapp_enabled):
+            is_valid = await verify_twilio_2fa_code(str(user["_id"]), totp_token)
+        
         if not is_valid:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -140,7 +154,7 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
 # Add an additional endpoint for 2FA authentication
 @router.post("/login/2fa-check", response_model=dict)
 async def check_2fa_required(login_data: dict):
-    """Check if 2FA is required for login"""
+    """Check if 2FA is required for login and which method to use"""
     email = login_data.get("email")
     password = login_data.get("password")
     
@@ -164,13 +178,25 @@ async def check_2fa_required(login_data: dict):
             detail="Email not verified. Please verify your email before logging in."
         )
     
-    # Check if 2FA is enabled
+    # Check which 2FA methods are enabled
     totp_enabled = user.get("totp_enabled", False)
+    sms_enabled = user.get("sms_enabled", False)
+    whatsapp_enabled = user.get("whatsapp_enabled", False)
+    preferred_method = user.get("preferred_2fa_method", TwoFactorMethod.NONE)
     
+    # If any 2FA method is enabled, send a verification code if it's SMS or WhatsApp
+    if preferred_method in [TwoFactorMethod.SMS, TwoFactorMethod.WHATSAPP]:
+        await send_2fa_code(str(user["_id"]), preferred_method)
+    
+    # Return which 2FA methods are available
     return {
         "totp_required": totp_enabled,
+        "sms_required": sms_enabled,
+        "whatsapp_required": whatsapp_enabled,
+        "preferred_method": preferred_method,
         "email": email,
-        "user_id": str(user["_id"]) if totp_enabled else None
+        "user_id": str(user["_id"]) if any([totp_enabled, sms_enabled, whatsapp_enabled]) else None,
+        "phone_number": user.get("phone_number", None) if any([sms_enabled, whatsapp_enabled]) else None
     }
 
 @router.get("/me", response_model=User)
@@ -361,4 +387,133 @@ async def get_totp_status(current_user: Annotated[User, Depends(get_current_user
     is_enabled = await is_totp_enabled(current_user.id)
     return {
         "totp_enabled": is_enabled
+    }
+    
+@router.post("/twilio/setup", response_model=dict)
+async def setup_phone_verification_endpoint(
+    verification_data: PhoneVerificationRequest,
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """Set up phone verification for SMS or WhatsApp"""
+    if verification_data.method not in [TwoFactorMethod.SMS, TwoFactorMethod.WHATSAPP]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid verification method. Use 'sms' or 'whatsapp'."
+        )
+    
+    # Format phone number (ensure it has international format)
+    phone_number = verification_data.phone_number
+    if not phone_number.startswith('+'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Phone number must include country code (e.g., +12125551234)"
+        )
+    
+    # Set up verification
+    success = await setup_phone_verification(
+        current_user.id,
+        phone_number,
+        verification_data.method
+    )
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send verification via {verification_data.method}"
+        )
+    
+    return {
+        "status": "success",
+        "message": f"Verification code sent to {phone_number} via {verification_data.method}",
+        "phone_number": phone_number,
+        "method": verification_data.method
+    }
+
+@router.post("/twilio/verify", response_model=dict)
+async def verify_phone_number_endpoint(
+    verify_data: PhoneVerificationVerify,
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """Verify phone number with the provided code"""
+    result = await verify_phone_number(
+        current_user.id,
+        verify_data.phone_number,
+        verify_data.code,
+        verify_data.method
+    )
+    
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result["message"]
+        )
+    
+    return {
+        "status": "success",
+        "message": result["message"],
+        "method": verify_data.method
+    }
+
+@router.post("/twilio/send-code", response_model=dict)
+async def send_twilio_code(
+    method_data: TwoFactorMethodUpdate,
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """Send a 2FA code via SMS or WhatsApp"""
+    if method_data.method not in [TwoFactorMethod.SMS, TwoFactorMethod.WHATSAPP]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid method. Use 'sms' or 'whatsapp'."
+        )
+    
+    result = await send_2fa_code(current_user.id, method_data.method)
+    
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result["message"]
+        )
+    
+    return {
+        "status": "success",
+        "message": result["message"]
+    }
+
+@router.post("/2fa/method", response_model=dict)
+async def update_2fa_method(
+    method_data: TwoFactorMethodUpdate,
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """Update the preferred 2FA method"""
+    result = await update_preferred_2fa_method(current_user.id, method_data.method)
+    
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result["message"]
+        )
+    
+    return {
+        "status": "success",
+        "message": result["message"],
+        "method": method_data.method
+    }
+
+@router.post("/2fa/disable", response_model=dict)
+async def disable_2fa_method_endpoint(
+    method_data: TwoFactorMethodUpdate,
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """Disable a specific 2FA method"""
+    result = await disable_2fa_method(current_user.id, method_data.method)
+    
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result["message"]
+        )
+    
+    return {
+        "status": "success",
+        "message": result["message"]
     }

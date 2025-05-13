@@ -6,7 +6,12 @@ import React, {
   useContext,
   ReactNode,
 } from "react";
-import { User, VerificationRequest, ResendVerificationRequest } from "../types";
+import {
+  User,
+  VerificationRequest,
+  ResendVerificationRequest,
+  TwoFactorMethod,
+} from "../types";
 import AuthApi from "../api/auth.api";
 
 interface AuthContextType {
@@ -18,7 +23,8 @@ interface AuthContextType {
   loginWith2FA: (
     email: string,
     password: string,
-    totpToken: string
+    totpToken: string,
+    method?: TwoFactorMethod
   ) => Promise<void>;
   logout: () => void;
   clearError: () => void;
@@ -109,13 +115,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const loginWith2FA = async (
     email: string,
     password: string,
-    totpToken: string
+    totpToken: string,
+    method: TwoFactorMethod = TwoFactorMethod.TOTP
   ) => {
     setLoading(true);
     setError(null); // Clear previous errors
 
     try {
-      const auth = await AuthApi.loginWith2FA(email, password, totpToken);
+      const auth = await AuthApi.loginWith2FA(
+        email,
+        password,
+        totpToken,
+        method
+      );
       localStorage.setItem("token", auth.access_token);
 
       // Get user information after successful login
