@@ -1563,25 +1563,12 @@ const GoogleDriveManagement: React.FC = () => {
                 <button
                   type="button"
                   className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-[#7A2048] text-base font-medium text-white hover:bg-[#7A2048]/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#7A2048] sm:ml-3 sm:w-auto sm:text-sm"
-                  onClick={async () => {
-                    if (permissionToRevoke) {
-                      try {
-                        await AccessApi.revokePermission(permissionToRevoke);
-                        setActivePermissions((prev) =>
-                          prev.filter((p) => p.id !== permissionToRevoke)
-                        );
-                        showToast("Permission revoked successfully", "success");
-                      } catch (error) {
-                        console.error("Error revoking permission:", error);
-                        showToast("Failed to revoke permission", "error");
-                      } finally {
-                        setShowRevokeConfirmModal(false);
-                        setPermissionToRevoke(null);
-                      }
-                    }
-                  }}
+                  onClick={handleRejectRequest}
+                  disabled={processingRequest === selectedRequest?.id}
                 >
-                  Revoke
+                  {processingRequest === selectedRequest?.id
+                    ? "Processing..."
+                    : "Reject"}
                 </button>
                 <button
                   type="button"

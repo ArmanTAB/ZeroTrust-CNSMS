@@ -4,14 +4,49 @@ import { Link } from "react-router-dom";
 import MainLayout from "../../components/Layout/MainLayout";
 import AccessApi from "../../api/access.api";
 import { AccessLog, AccessType } from "../../types";
+import { useToast } from "../../store/ToastContext";
+
+// Enhanced AccessLog type that includes Drive access request logs and permission logs
+interface EnhancedAccessLog {
+  id: string;
+  device_id?: string;
+  user_id?: string;
+  user_email?: string; // Added for Drive logs
+  ip_address?: string;
+  user_agent?: string;
+  resource: string;
+  timestamp: string; // Common field across all log types
+  access_type?: AccessType;
+  context?: any;
+  access_granted: boolean;
+  reason?: string;
+  risk_level?: number;
+  decision_factors?: any[];
+  // Additional fields for Drive access requests
+  folder_id?: string;
+  folder_name?: string;
+  status?: string;
+  decision_time?: string;
+  decision_by?: string;
+  decision_by_email?: string;
+  // Type to identify source of the log
+  log_type: "access" | "drive_request" | "permission";
+  // Additional fields for permission logs
+  role?: string;
+  granted_at?: string;
+  granted_by?: string;
+  revoked_at?: string;
+  revoked_by?: string;
+}
 
 const AccessLogsPage: React.FC = () => {
-  const [logs, setLogs] = useState<AccessLog[]>([]);
+  const [logs, setLogs] = useState<EnhancedAccessLog[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(true);
+  const { showToast } = useToast();
   const itemsPerPage = 10;
 
   // Filters
@@ -21,6 +56,10 @@ const AccessLogsPage: React.FC = () => {
     resource: "",
     start_time: "",
     end_time: "",
+    log_type: "" as "" | "access" | "drive_request" | "permission",
+    user_email: "",
+    folder_id: "",
+    status: "",
   });
 
   useEffect(() => {
@@ -29,14 +68,15 @@ const AccessLogsPage: React.FC = () => {
 
   const fetchLogs = async () => {
     setLoading(true);
+    setError(null);
     try {
-      // Prepare params with pagination and filters
+      // Prepare params with pagination and filters for regular access logs
       const params: any = {
         skip: (currentPage - 1) * itemsPerPage,
         limit: itemsPerPage,
       };
 
-      // Add filters if set
+      // Add filters if set for regular access logs
       if (filters.device_id) params.device_id = filters.device_id;
       if (filters.access_granted !== undefined)
         params.access_granted = filters.access_granted;
@@ -44,15 +84,140 @@ const AccessLogsPage: React.FC = () => {
       if (filters.start_time) params.start_time = new Date(filters.start_time);
       if (filters.end_time) params.end_time = new Date(filters.end_time);
 
-      const response = await AccessApi.getAccessLogs(params);
-      setLogs(response);
+      // Create array to hold all log types
+      let allLogs: EnhancedAccessLog[] = [];
 
-      // In a real app, API should return total count
-      // For now, we just set a simple placeholder
-      setTotalPages(Math.ceil(response.length / itemsPerPage) || 1);
+      // Fetch regular access logs if not filtering by other log types or if specifically requested
+      if (!filters.log_type || filters.log_type === "access") {
+        try {
+          const accessLogs = await AccessApi.getAccessLogs(params);
+
+          // Convert to enhanced format
+          const enhancedAccessLogs = accessLogs.map((log) => ({
+            ...log,
+            log_type: "access" as const,
+          }));
+
+          allLogs = [...allLogs, ...enhancedAccessLogs];
+        } catch (err) {
+          console.error("Error fetching access logs:", err);
+          if (!filters.log_type) {
+            showToast(
+              "Error fetching access logs. Other log types will still be displayed.",
+              "warning"
+            );
+          } else {
+            setError("Failed to fetch access logs");
+          }
+        }
+      }
+
+      // Fetch Drive access requests if not filtering or specifically requested
+      if (!filters.log_type || filters.log_type === "drive_request") {
+        try {
+          // For Drive requests, we don't use the same pagination because we'll merge and paginate after
+          const driveRequestParams: any = {};
+          if (filters.status) driveRequestParams.status = filters.status;
+          if (filters.folder_id)
+            driveRequestParams.folder_id = filters.folder_id;
+
+          const driveRequests = await AccessApi.getDriveAccessRequests(
+            filters.status
+          );
+
+          // Convert Drive requests to the enhanced log format
+          const enhancedDriveRequests = driveRequests.map((req) => ({
+            id: req.id,
+            user_id: req.user_id,
+            user_email: req.user_email,
+            device_id: req.device_id,
+            ip_address: req.device_ip,
+            resource: `Google Drive: ${req.folder_name}`,
+            timestamp: req.request_time,
+            folder_id: req.folder_id,
+            folder_name: req.folder_name,
+            status: req.status,
+            decision_time: req.decision_time,
+            decision_by: req.decision_by,
+            decision_by_email: req.decision_by_email,
+            access_granted: req.status === "approved",
+            reason: req.reason,
+            log_type: "drive_request" as const,
+          }));
+
+          allLogs = [...allLogs, ...enhancedDriveRequests];
+        } catch (err) {
+          console.error("Error fetching drive access requests:", err);
+          if (!filters.log_type) {
+            showToast(
+              "Error fetching drive requests. Other log types will still be displayed.",
+              "warning"
+            );
+          } else {
+            setError("Failed to fetch drive access requests");
+          }
+        }
+      }
+
+      // Fetch permission history if not filtering or specifically requested
+      if (!filters.log_type || filters.log_type === "permission") {
+        try {
+          const permissions = await AccessApi.getActivePermissions();
+
+          // Convert permissions to the enhanced log format
+          const enhancedPermissions = permissions.map((perm) => ({
+            id: perm.id,
+            user_email: perm.user_email,
+            resource: `Google Drive Permission: ${perm.folder_name}`,
+            timestamp: perm.granted_at,
+            folder_id: perm.folder_id,
+            folder_name: perm.folder_name,
+            access_granted: true,
+            role: perm.role,
+            granted_at: perm.granted_at,
+            granted_by: perm.granted_by,
+            log_type: "permission" as const,
+          }));
+
+          allLogs = [...allLogs, ...enhancedPermissions];
+        } catch (err) {
+          console.error("Error fetching permissions:", err);
+          if (!filters.log_type) {
+            showToast(
+              "Error fetching permissions. Other log types will still be displayed.",
+              "warning"
+            );
+          } else {
+            setError("Failed to fetch permissions");
+          }
+        }
+      }
+
+      // Filter by user email if specified
+      if (filters.user_email) {
+        allLogs = allLogs.filter((log) =>
+          log.user_email
+            ?.toLowerCase()
+            .includes(filters.user_email.toLowerCase())
+        );
+      }
+
+      // Sort all logs by timestamp (newest first)
+      allLogs.sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+
+      // Manual pagination after merging
+      const startIdx = (currentPage - 1) * itemsPerPage;
+      const endIdx = startIdx + itemsPerPage;
+      const paginatedLogs = allLogs.slice(startIdx, endIdx);
+
+      setLogs(paginatedLogs);
+      setTotalPages(Math.ceil(allLogs.length / itemsPerPage) || 1);
     } catch (err: any) {
-      console.error("Error fetching access logs:", err);
-      setError(err.message || "Failed to fetch access logs");
+      console.error("Error fetching logs:", err);
+      setError(err.message || "Failed to fetch logs");
     } finally {
       setLoading(false);
     }
@@ -87,11 +252,17 @@ const AccessLogsPage: React.FC = () => {
       resource: "",
       start_time: "",
       end_time: "",
+      log_type: "",
+      user_email: "",
+      folder_id: "",
+      status: "",
     });
     setCurrentPage(1);
   };
 
-  const getAccessTypeStyle = (accessType: AccessType) => {
+  const getAccessTypeStyle = (accessType?: AccessType) => {
+    if (!accessType) return "bg-gray-100 text-gray-800 border-gray-200";
+
     switch (accessType) {
       case AccessType.READ:
         return "bg-blue-100 text-blue-800 border-blue-200";
@@ -108,7 +279,9 @@ const AccessLogsPage: React.FC = () => {
     }
   };
 
-  const getRiskLevelStyle = (riskLevel: number) => {
+  const getRiskLevelStyle = (riskLevel?: number) => {
+    if (!riskLevel) return "bg-gray-100 text-gray-800 border-gray-200";
+
     if (riskLevel <= 30) {
       return "bg-green-100 text-green-800 border-green-200";
     } else if (riskLevel <= 70) {
@@ -118,8 +291,40 @@ const AccessLogsPage: React.FC = () => {
     }
   };
 
+  const getRequestStatusStyle = (status?: string) => {
+    if (!status) return "bg-gray-100 text-gray-800 border-gray-200";
+
+    switch (status) {
+      case "pending":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200";
+      case "approved":
+        return "bg-green-100 text-green-800 border-green-200";
+      case "rejected":
+        return "bg-red-100 text-red-800 border-red-200";
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-200";
+    }
+  };
+
+  const getPermissionRoleStyle = (role?: string) => {
+    if (!role) return "bg-gray-100 text-gray-800 border-gray-200";
+
+    switch (role) {
+      case "reader":
+        return "bg-blue-100 text-blue-800 border-blue-200";
+      case "writer":
+        return "bg-purple-100 text-purple-800 border-purple-200";
+      case "owner":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200";
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-200";
+    }
+  };
+
   // Get appropriate icon for access type
-  const getAccessTypeIcon = (accessType: AccessType) => {
+  const getAccessTypeIcon = (accessType?: AccessType) => {
+    if (!accessType) return null;
+
     switch (accessType) {
       case AccessType.READ:
         return (
@@ -238,6 +443,76 @@ const AccessLogsPage: React.FC = () => {
     }
   };
 
+  // Get appropriate icon for log type
+  const getLogTypeIcon = (logType: string) => {
+    switch (logType) {
+      case "access":
+        return (
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+            />
+          </svg>
+        );
+      case "drive_request":
+        return (
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+            />
+          </svg>
+        );
+      case "permission":
+        return (
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+            />
+          </svg>
+        );
+      default:
+        return (
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+        );
+    }
+  };
+
   return (
     <MainLayout>
       <div className="mb-6">
@@ -245,7 +520,8 @@ const AccessLogsPage: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Access Logs</h1>
             <p className="text-gray-600 mt-1">
-              Review and monitor all access attempts in your network
+              Review and monitor all access attempts and requests in your
+              network
             </p>
           </div>
           <div className="mt-4 sm:mt-0">
@@ -301,74 +577,14 @@ const AccessLogsPage: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                   <label
-                    htmlFor="device_id"
+                    htmlFor="log_type"
                     className="block text-sm font-medium text-gray-700 mb-1"
                   >
-                    Device ID
-                  </label>
-                  <input
-                    type="text"
-                    id="device_id"
-                    name="device_id"
-                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    value={filters.device_id}
-                    onChange={handleFilterChange}
-                    placeholder="Enter device ID"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="resource"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Resource
-                  </label>
-                  <input
-                    type="text"
-                    id="resource"
-                    name="resource"
-                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    value={filters.resource}
-                    onChange={handleFilterChange}
-                    placeholder="e.g. /api/finance"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="access_granted"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Access Result
+                    Log Type
                   </label>
                   <select
-                    id="access_granted"
-                    name="access_granted"
-                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    value={
-                      filters.access_granted === undefined
-                        ? ""
-                        : String(filters.access_granted)
-                    }
-                    onChange={handleFilterChange}
-                  >
-                    <option value="">All</option>
-                    <option value="true">Granted</option>
-                    <option value="false">Denied</option>
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                <div>
-                  <label
-                    htmlFor="start_time"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Start Date
-                  </label>
-                  <input
-                    type="datetime-local"
-                    id="start_time"
-                    name="start_time"
+                    id="log_type"
+                    name="log_type"
                     className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     value={filters.start_time}
                     onChange={handleFilterChange}
@@ -442,8 +658,12 @@ const AccessLogsPage: React.FC = () => {
         </div>
       ) : (
         <>
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden w-full">
+            {/* Make the container responsive */}
+            <div
+              className="w-full overflow-x-auto"
+              style={{ maxWidth: "100%" }}
+            >
               {logs.length === 0 ? (
                 <div className="py-10 text-center">
                   <svg
@@ -467,50 +687,44 @@ const AccessLogsPage: React.FC = () => {
                   </p>
                 </div>
               ) : (
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="w-full divide-y divide-gray-200">
                   <thead>
                     <tr className="bg-gray-50">
                       <th
                         scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24 sm:w-32"
                       >
-                        Timestamp
+                        Time
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24 sm:w-28"
                       >
-                        Device ID
+                        Type
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32 sm:w-40"
                       >
                         User
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32 sm:w-40"
                       >
                         Resource
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24 sm:w-32"
                       >
-                        Access
+                        Status
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24 sm:w-32"
                       >
-                        Risk Level
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
-                        Details
+                        Info
                       </th>
                     </tr>
                   </thead>
@@ -520,125 +734,216 @@ const AccessLogsPage: React.FC = () => {
                         key={log.id}
                         className="hover:bg-gray-50 transition-colors duration-150"
                       >
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(log.timestamp).toLocaleString()}
+                        <td className="px-3 py-3 text-sm text-gray-500">
+                          {new Date(log.timestamp).toLocaleString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Link
-                            to={`/devices/${log.device_id}`}
-                            className="text-blue-600 hover:text-blue-900 font-medium text-sm hover:underline"
-                          >
-                            {log.device_id}
-                          </Link>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {log.user_id || (
-                            <span className="text-gray-400 italic">N/A</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-3 py-3">
                           <div className="flex items-center">
-                            <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
-                              {log.resource}
+                            <span className="mr-1 flex-shrink-0">
+                              {getLogTypeIcon(log.log_type)}
+                            </span>
+                            <span className="text-xs text-gray-900 truncate">
+                              {log.log_type === "access"
+                                ? "Access"
+                                : log.log_type === "drive_request"
+                                ? "Request"
+                                : "Permission"}
                             </span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex flex-col">
-                            <div
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getAccessTypeStyle(
-                                log.access_type
-                              )}`}
-                            >
-                              <span className="mr-1">
-                                {getAccessTypeIcon(log.access_type)}
-                              </span>
-                              {log.access_type}
+                        <td className="px-3 py-3">
+                          {log.user_email ? (
+                            <div className="text-xs font-medium text-gray-900 break-words max-w-[120px] sm:max-w-[160px]">
+                              {log.user_email}
                             </div>
-                            <div className="mt-1">
+                          ) : (
+                            <span className="text-gray-400 italic text-xs">
+                              N/A
+                            </span>
+                          )}
+                          {log.device_id && (
+                            <div className="text-xs text-gray-500 break-words max-w-[120px] sm:max-w-[160px]">
+                              ID: {log.device_id}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-xs text-gray-900">
+                          <div className="text-xs bg-gray-100 px-2 py-1 rounded break-words max-w-[120px] sm:max-w-[160px]">
+                            {log.resource}
+                          </div>
+                          {log.folder_name && (
+                            <div className="text-xs text-gray-500 mt-1 break-words max-w-[120px] sm:max-w-[160px]">
+                              {log.folder_name}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-col space-y-1">
+                            {log.log_type === "access" && log.access_type && (
+                              <div
+                                className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium border ${getAccessTypeStyle(
+                                  log.access_type
+                                )}`}
+                              >
+                                <span className="mr-1">
+                                  {getAccessTypeIcon(log.access_type)}
+                                </span>
+                                <span className="truncate max-w-[60px] sm:max-w-full">
+                                  {log.access_type}
+                                </span>
+                              </div>
+                            )}
+
+                            {log.log_type === "drive_request" && log.status && (
+                              <div
+                                className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium border ${getRequestStatusStyle(
+                                  log.status
+                                )}`}
+                              >
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full mr-1 ${
+                                    log.status === "approved"
+                                      ? "bg-green-600"
+                                      : log.status === "rejected"
+                                      ? "bg-red-600"
+                                      : "bg-yellow-600"
+                                  }`}
+                                ></span>
+                                <span className="truncate max-w-[60px] sm:max-w-full">
+                                  {log.status}
+                                </span>
+                              </div>
+                            )}
+
+                            {log.log_type === "permission" && log.role && (
+                              <div
+                                className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium border ${getPermissionRoleStyle(
+                                  log.role
+                                )}`}
+                              >
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full mr-1 bg-blue-600`}
+                                ></span>
+                                <span className="truncate max-w-[60px] sm:max-w-full">
+                                  {log.role}
+                                </span>
+                              </div>
+                            )}
+
+                            <div>
                               <span
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                                className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium border ${
                                   log.access_granted
                                     ? "bg-green-100 text-green-800 border-green-200"
                                     : "bg-red-100 text-red-800 border-red-200"
                                 }`}
                               >
                                 <span
-                                  className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                                  className={`w-1.5 h-1.5 rounded-full mr-1 ${
                                     log.access_granted
                                       ? "bg-green-600"
                                       : "bg-red-600"
                                   }`}
                                 ></span>
-                                {log.access_granted ? "Granted" : "Denied"}
+                                <span className="truncate max-w-[60px] sm:max-w-full">
+                                  {log.access_granted ? "Granted" : "Denied"}
+                                </span>
                               </span>
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getRiskLevelStyle(
-                              log.risk_level
-                            )}`}
-                          >
-                            <span className="mr-1">
-                              {log.risk_level <= 30 ? (
-                                <svg
-                                  className="w-3 h-3"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth="2"
-                                    d="M5 13l4 4L19 7"
-                                  />
-                                </svg>
-                              ) : log.risk_level <= 70 ? (
-                                <svg
-                                  className="w-3 h-3"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth="2"
-                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                                  />
-                                </svg>
-                              ) : (
-                                <svg
-                                  className="w-3 h-3"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth="2"
-                                    d="M6 18L18 6M6 6l12 12"
-                                  />
-                                </svg>
-                              )}
-                            </span>
-                            {log.risk_level}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button
-                            className="text-blue-600 hover:text-blue-900 px-3 py-1 rounded-md hover:bg-blue-50 transition-colors duration-150"
-                            onClick={() => {
-                              // This could open a modal with log details
-                              alert(`Details for log ${log.id}`);
-                            }}
-                          >
-                            View
-                          </button>
+                        <td className="px-3 py-3">
+                          {log.log_type === "access" &&
+                          log.risk_level !== undefined ? (
+                            <div
+                              className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium border ${getRiskLevelStyle(
+                                log.risk_level
+                              )}`}
+                            >
+                              <span className="mr-1">
+                                {log.risk_level <= 30 ? (
+                                  <svg
+                                    className="w-3 h-3"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth="2"
+                                      d="M5 13l4 4L19 7"
+                                    />
+                                  </svg>
+                                ) : log.risk_level <= 70 ? (
+                                  <svg
+                                    className="w-3 h-3"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth="2"
+                                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                                    />
+                                  </svg>
+                                ) : (
+                                  <svg
+                                    className="w-3 h-3"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth="2"
+                                      d="M6 18L18 6M6 6l12 12"
+                                    />
+                                  </svg>
+                                )}
+                              </span>
+                              {log.risk_level}
+                            </div>
+                          ) : null}
+
+                          {log.reason ? (
+                            <div className="text-xs text-gray-500 mt-1 break-words max-w-[80px] sm:max-w-[120px]">
+                              {log.reason}
+                            </div>
+                          ) : null}
+
+                          {log.log_type === "drive_request" &&
+                          log.decision_by_email ? (
+                            <div className="text-xs text-gray-500 mt-1 break-words max-w-[80px] sm:max-w-[120px]">
+                              By: {log.decision_by_email}
+                            </div>
+                          ) : null}
+
+                          {log.log_type === "permission" && log.granted_by ? (
+                            <div className="text-xs text-gray-500 mt-1 break-words max-w-[80px] sm:max-w-[120px]">
+                              {log.granted_by}
+                            </div>
+                          ) : null}
+
+                          {/* Show 'no info' if none of the above rendered */}
+                          {!(
+                            (log.log_type === "access" &&
+                              log.risk_level !== undefined) ||
+                            log.reason ||
+                            (log.log_type === "drive_request" &&
+                              log.decision_by_email) ||
+                            (log.log_type === "permission" && log.granted_by)
+                          ) && (
+                            <div className="text-xs text-gray-500">No info found</div>
+                          )}
                         </td>
                       </tr>
                     ))}
