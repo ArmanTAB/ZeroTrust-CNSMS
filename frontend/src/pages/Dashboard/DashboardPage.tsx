@@ -18,6 +18,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import AccessRequestsSummary from "../../components/GoogleDrive/AccessRequestsSummary";
 
 const DashboardPage: React.FC = () => {
   const [deviceStats, setDeviceStats] = useState<any>({
@@ -252,7 +253,9 @@ const DashboardPage: React.FC = () => {
           {/* Access Activity Card */}
           <div className="bg-white rounded-xl shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200 bg-[#1E2761] text-white">
-              <h2 className="text-lg font-semibold">Access Activity (7 Days)</h2>
+              <h2 className="text-lg font-semibold">
+                Access Activity (7 Days)
+              </h2>
             </div>
             <div className="p-6 flex items-center justify-center h-64">
               {accessActivity.length > 0 ? (
@@ -378,154 +381,7 @@ const DashboardPage: React.FC = () => {
               </Link>
             </div>
             <div className="p-4">
-              {driveRequests.pending > 0 ? (
-                <div>
-                  <div className="flex mb-4 space-x-4">
-                    <div className="bg-[#408EC6] bg-opacity-10 rounded-lg p-4 flex-1 flex items-center justify-between">
-                      <div>
-                        <div className="text-xs font-medium text-[#408EC6]">
-                          Pending Requests
-                        </div>
-                        <div className="text-2xl font-bold text-[#1E2761]">
-                          {driveRequests.pending}
-                        </div>
-                      </div>
-                      <div className="w-10 h-10 bg-[#408EC6] bg-opacity-20 rounded-full flex items-center justify-center">
-                        <svg
-                          className="w-5 h-5 text-[#408EC6]"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-                    <div className="bg-green-50 rounded-lg p-4 flex-1 flex items-center justify-between">
-                      <div>
-                        <div className="text-xs font-medium text-green-600">
-                          Approved
-                        </div>
-                        <div className="text-2xl font-bold text-gray-800">
-                          {driveRequests.approved || 0}
-                        </div>
-                      </div>
-                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                        <svg
-                          className="w-5 h-5 text-green-600"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M5 13l4 4L19 7"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-                    <div className="bg-red-50 rounded-lg p-4 flex-1 flex items-center justify-between">
-                      <div>
-                        <div className="text-xs font-medium text-red-600">
-                          Rejected
-                        </div>
-                        <div className="text-2xl font-bold text-gray-800">
-                          {driveRequests.rejected || 0}
-                        </div>
-                      </div>
-                      <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                        <svg
-                          className="w-5 h-5 text-red-600"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M6 18L18 6M6 6l12 12"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-
-                  {driveRequests.recent_pending &&
-                    driveRequests.recent_pending.length > 0 && (
-                      <div>
-                        <h3 className="text-sm font-medium text-gray-700 mb-2">
-                          Recent Pending Requests
-                        </h3>
-                        <div className="divide-y divide-gray-200">
-                          {driveRequests.recent_pending.map(
-                            (request: any, index: number) => (
-                              <div key={index} className="py-3">
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <p className="text-sm font-medium text-gray-900">
-                                      {request.user_email}
-                                    </p>
-                                    <p className="text-xs text-gray-500">
-                                      Requested access to{" "}
-                                      <span className="font-medium">
-                                        {request.folder_name}
-                                      </span>
-                                    </p>
-                                  </div>
-                                  <div className="flex space-x-2">
-                                    <Link
-                                      to={`/google-drive`}
-                                      className="bg-[#408EC6] text-white px-2 py-1 text-xs rounded"
-                                    >
-                                      Approve
-                                    </Link>
-                                    <Link
-                                      to={`/google-drive`}
-                                      className="bg-[#7A2048] text-white px-2 py-1 text-xs rounded"
-                                    >
-                                      Reject
-                                    </Link>
-                                  </div>
-                                </div>
-                              </div>
-                            )
-                          )}
-                        </div>
-                      </div>
-                    )}
-                </div>
-              ) : (
-                <div className="py-10 text-center">
-                  <svg
-                    className="mx-auto h-12 w-12 text-gray-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">
-                    No pending access requests
-                  </h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    There are no Google Drive access requests to approve or
-                    reject.
-                  </p>
-                </div>
-              )}
+              <AccessRequestsSummary />
             </div>
           </div>
         </div>

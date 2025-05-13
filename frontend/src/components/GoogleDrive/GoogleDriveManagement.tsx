@@ -589,43 +589,45 @@ const GoogleDriveManagement: React.FC = () => {
             </div>
           </div>
         ) : (
+          // Improved table container with better overflow handling
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="w-full divide-y divide-gray-200 table-fixed">
               <thead className="bg-gray-50">
                 <tr>
+                  {/* Reduce column widths */}
                   <th
                     scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4"
                   >
                     User
                   </th>
                   <th
                     scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4"
                   >
                     Folder
                   </th>
                   <th
                     scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6"
                   >
                     Role
                   </th>
                   <th
                     scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6"
                   >
                     Granted By
                   </th>
                   <th
                     scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell w-1/6"
                   >
-                    Granted At
+                    Date
                   </th>
                   <th
                     scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/12"
                   >
                     Actions
                   </th>
@@ -634,20 +636,20 @@ const GoogleDriveManagement: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {activePermissions.map((permission) => (
                   <tr key={permission.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
+                    <td className="px-3 py-3">
+                      <div className="text-sm font-medium text-gray-900 truncate max-w-[150px]">
                         {permission.user_email}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                    <td className="px-3 py-3">
+                      <div className="text-sm text-gray-900 truncate max-w-[150px]">
                         {permission.folder_name}
                       </div>
-                      <div className="text-xs text-gray-500 font-mono truncate max-w-xs">
-                        {permission.folder_id}
+                      <div className="text-xs text-gray-500 font-mono truncate max-w-[150px]">
+                        {permission.folder_id.substring(0, 15)}...
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-3">
                       <span
                         className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                           permission.role === "owner"
@@ -660,17 +662,17 @@ const GoogleDriveManagement: React.FC = () => {
                         {permission.role}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                    <td className="px-3 py-3">
+                      <div className="text-sm text-gray-900 truncate max-w-[100px]">
                         {permission.granted_by}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-3 hidden md:table-cell">
                       <div className="text-sm text-gray-900">
-                        {new Date(permission.granted_at).toLocaleString()}
+                        {new Date(permission.granted_at).toLocaleDateString()}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-3 py-3 text-sm font-medium">
                       <button
                         onClick={() => handleRevokePermission(permission.id)}
                         className="text-[#7A2048] hover:text-[#7A2048]/80 px-2 py-1 rounded hover:bg-[#7A2048]/10"

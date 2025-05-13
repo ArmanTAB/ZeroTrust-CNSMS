@@ -101,55 +101,80 @@ async def get_access_activity(
     days: int = 7
 ):
     """Get access activity stats by day of week for the last N days"""
-    # Вычисляем дату начала периода
+    # Calculate the start date for the period
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(days=days)
     
-    # Получаем все логи за указанный период
+    # Create a dictionary to store activity data by day
+    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    activity_data = {day: {"allowed": 0, "denied": 0} for day in day_names}
+    
+    # 1. Get regular access logs
     logs = await get_access_logs(
         start_time=start_date,
         end_time=end_date,
         skip=0,
-        limit=1000  # Увеличиваем лимит, чтобы получить все логи
+        limit=1000  # Increased limit to ensure we get all logs
     )
     
-    # Создаем словарь для хранения статистики по дням недели
-    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    activity_data = {day: {"allowed": 0, "denied": 0} for day in day_names}
-    
-    # Анализируем каждый лог и обновляем статистику
+    # Process regular access logs
     for log in logs:
-        # Обрабатываем timestamp, который может быть строкой или datetime объектом
+        # Convert timestamp to datetime if it's a string
         timestamp = log["timestamp"]
         if isinstance(timestamp, str):
-            # Если строка, попробуем преобразовать в datetime
             try:
                 log_date = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
             except (ValueError, TypeError):
-                # Если не удалось преобразовать, попробуем другой формат
                 try:
                     log_date = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%f")
                 except ValueError:
                     try:
                         log_date = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S")
                     except ValueError:
-                        # Если всё равно не удалось, пропускаем этот лог
                         continue
         else:
-            # Если это уже объект datetime, используем его
             log_date = timestamp
         
-        # Получаем день недели (0 = Monday, 6 = Sunday)
+        # Skip if outside the date range
+        if log_date < start_date or log_date > end_date:
+            continue
+            
+        # Get day of week (0 = Monday, 6 = Sunday)
         day_index = log_date.weekday()
         day_of_week = day_names[day_index]
         
-        # Обновляем статистику
+        # Update statistics
         if log.get("access_granted", False):
             activity_data[day_of_week]["allowed"] += 1
         else:
             activity_data[day_of_week]["denied"] += 1
     
-    # Преобразуем словарь в список объектов для отправки на фронтенд
+    # 2. Now also get Google Drive access requests
+    try:
+        drive_requests_cursor = db.db.drive_access_requests.find({
+            "request_time": {"$gte": start_date, "$lte": end_date}
+        })
+        
+        async for req in drive_requests_cursor:
+            # Get timestamp
+            request_time = req.get("request_time")
+            if not request_time:
+                continue
+                
+            # Get day of week
+            day_index = request_time.weekday()
+            day_of_week = day_names[day_index]
+            
+            # Update statistics based on status
+            if req.get("status") == "approved":
+                activity_data[day_of_week]["allowed"] += 1
+            elif req.get("status") in ["rejected", "pending"]:
+                # Count pending as denied for visualization purposes
+                activity_data[day_of_week]["denied"] += 1
+    except Exception as e:
+        logger.error(f"Error processing drive access requests: {str(e)}")
+    
+    # Convert dictionary to list format for frontend
     result = [
         {"day": day, "allowed": activity_data[day]["allowed"], "denied": activity_data[day]["denied"]}
         for day in day_names

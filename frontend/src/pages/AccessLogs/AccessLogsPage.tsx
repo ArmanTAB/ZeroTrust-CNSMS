@@ -9,6 +9,7 @@ import { useToast } from "../../store/ToastContext";
 // Enhanced AccessLog type that includes Drive access request logs and permission logs
 interface EnhancedAccessLog {
   id: string;
+  clientId?: string;
   device_id?: string;
   user_id?: string;
   user_email?: string; // Added for Drive logs
@@ -41,6 +42,7 @@ interface EnhancedAccessLog {
 
 const AccessLogsPage: React.FC = () => {
   const [logs, setLogs] = useState<EnhancedAccessLog[]>([]);
+  const [allLogs, setAllLogs] = useState<EnhancedAccessLog[]>([]); // Store all logs for client-side filtering
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -62,71 +64,45 @@ const AccessLogsPage: React.FC = () => {
     status: "",
   });
 
-  useEffect(() => {
-    fetchLogs();
-  }, [currentPage, filters]);
+  const enhanceLogs = (logs: any[], type: string): EnhancedAccessLog[] => {
+    return logs.map((log, index) => ({
+      ...log,
+      log_type: type as "access" | "drive_request" | "permission",
+      clientId: `${type}_${log.id}_${index}`, // Add a guaranteed unique identifier
+    }));
+  };
 
-  const fetchLogs = async () => {
+  // Then modify your fetchAllLogs function to use this enhancer
+  const fetchAllLogs = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Prepare params with pagination and filters for regular access logs
-      const params: any = {
-        skip: (currentPage - 1) * itemsPerPage,
-        limit: itemsPerPage,
-      };
-
-      // Add filters if set for regular access logs
-      if (filters.device_id) params.device_id = filters.device_id;
-      if (filters.access_granted !== undefined)
-        params.access_granted = filters.access_granted;
-      if (filters.resource) params.resource = filters.resource;
-      if (filters.start_time) params.start_time = new Date(filters.start_time);
-      if (filters.end_time) params.end_time = new Date(filters.end_time);
-
       // Create array to hold all log types
-      let allLogs: EnhancedAccessLog[] = [];
+      let combinedLogs: EnhancedAccessLog[] = [];
 
-      // Fetch regular access logs if not filtering by other log types or if specifically requested
-      if (!filters.log_type || filters.log_type === "access") {
-        try {
-          const accessLogs = await AccessApi.getAccessLogs(params);
+      // Fetch regular access logs
+      try {
+        const accessLogs = await AccessApi.getAccessLogs({
+          limit: 100, // Get more logs to have enough data for filtering
+        });
 
-          // Convert to enhanced format
-          const enhancedAccessLogs = accessLogs.map((log) => ({
-            ...log,
-            log_type: "access" as const,
-          }));
-
-          allLogs = [...allLogs, ...enhancedAccessLogs];
-        } catch (err) {
-          console.error("Error fetching access logs:", err);
-          if (!filters.log_type) {
-            showToast(
-              "Error fetching access logs. Other log types will still be displayed.",
-              "warning"
-            );
-          } else {
-            setError("Failed to fetch access logs");
-          }
-        }
+        // Convert to enhanced format with unique keys
+        combinedLogs = [...combinedLogs, ...enhanceLogs(accessLogs, "access")];
+      } catch (err) {
+        console.error("Error fetching access logs:", err);
+        showToast(
+          "Error fetching access logs. Other log types will still be displayed.",
+          "warning"
+        );
       }
 
-      // Fetch Drive access requests if not filtering or specifically requested
-      if (!filters.log_type || filters.log_type === "drive_request") {
-        try {
-          // For Drive requests, we don't use the same pagination because we'll merge and paginate after
-          const driveRequestParams: any = {};
-          if (filters.status) driveRequestParams.status = filters.status;
-          if (filters.folder_id)
-            driveRequestParams.folder_id = filters.folder_id;
+      // Similar pattern for Drive requests and permissions...
+      try {
+        const driveRequests = await AccessApi.getDriveAccessRequests("");
 
-          const driveRequests = await AccessApi.getDriveAccessRequests(
-            filters.status
-          );
-
-          // Convert Drive requests to the enhanced log format
-          const enhancedDriveRequests = driveRequests.map((req) => ({
+        // Map with our enhanced function to ensure unique keys
+        const enhancedDriveRequests = enhanceLogs(
+          driveRequests.map((req) => ({
             id: req.id,
             user_id: req.user_id,
             user_email: req.user_email,
@@ -142,30 +118,21 @@ const AccessLogsPage: React.FC = () => {
             decision_by_email: req.decision_by_email,
             access_granted: req.status === "approved",
             reason: req.reason,
-            log_type: "drive_request" as const,
-          }));
+          })),
+          "drive_request"
+        );
 
-          allLogs = [...allLogs, ...enhancedDriveRequests];
-        } catch (err) {
-          console.error("Error fetching drive access requests:", err);
-          if (!filters.log_type) {
-            showToast(
-              "Error fetching drive requests. Other log types will still be displayed.",
-              "warning"
-            );
-          } else {
-            setError("Failed to fetch drive access requests");
-          }
-        }
+        combinedLogs = [...combinedLogs, ...enhancedDriveRequests];
+      } catch (err) {
+        // Error handling...
       }
 
-      // Fetch permission history if not filtering or specifically requested
-      if (!filters.log_type || filters.log_type === "permission") {
-        try {
-          const permissions = await AccessApi.getActivePermissions();
+      // And for permissions...
+      try {
+        const permissions = await AccessApi.getActivePermissions();
 
-          // Convert permissions to the enhanced log format
-          const enhancedPermissions = permissions.map((perm) => ({
+        const enhancedPermissions = enhanceLogs(
+          permissions.map((perm) => ({
             id: perm.id,
             user_email: perm.user_email,
             resource: `Google Drive Permission: ${perm.folder_name}`,
@@ -176,45 +143,30 @@ const AccessLogsPage: React.FC = () => {
             role: perm.role,
             granted_at: perm.granted_at,
             granted_by: perm.granted_by,
-            log_type: "permission" as const,
-          }));
+          })),
+          "permission"
+        );
 
-          allLogs = [...allLogs, ...enhancedPermissions];
-        } catch (err) {
-          console.error("Error fetching permissions:", err);
-          if (!filters.log_type) {
-            showToast(
-              "Error fetching permissions. Other log types will still be displayed.",
-              "warning"
-            );
-          } else {
-            setError("Failed to fetch permissions");
-          }
-        }
-      }
-
-      // Filter by user email if specified
-      if (filters.user_email) {
-        allLogs = allLogs.filter((log) =>
-          log.user_email
-            ?.toLowerCase()
-            .includes(filters.user_email.toLowerCase())
+        combinedLogs = [...combinedLogs, ...enhancedPermissions];
+      } catch (err) {
+        console.error("Error fetching permissions:", err);
+        showToast(
+          "Error fetching permissions. Other log types will still be displayed.",
+          "warning"
         );
       }
 
       // Sort all logs by timestamp (newest first)
-      allLogs.sort(
+      combinedLogs.sort(
         (a, b) =>
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
       );
 
-      // Manual pagination after merging
-      const startIdx = (currentPage - 1) * itemsPerPage;
-      const endIdx = startIdx + itemsPerPage;
-      const paginatedLogs = allLogs.slice(startIdx, endIdx);
+      // Store all logs
+      setAllLogs(combinedLogs);
 
-      setLogs(paginatedLogs);
-      setTotalPages(Math.ceil(allLogs.length / itemsPerPage) || 1);
+      // Apply initial filtering
+      applyFilters(combinedLogs);
     } catch (err: any) {
       console.error("Error fetching logs:", err);
       setError(err.message || "Failed to fetch logs");
@@ -223,26 +175,127 @@ const AccessLogsPage: React.FC = () => {
     }
   };
 
+  // Apply filters to the logs
+  const applyFilters = (logsToFilter = allLogs) => {
+    let filteredLogs = [...logsToFilter];
+
+    // Filter by log type
+    if (filters.log_type) {
+      filteredLogs = filteredLogs.filter(
+        (log) => log.log_type === filters.log_type
+      );
+    }
+
+    // Filter by access granted
+    if (filters.access_granted !== undefined) {
+      filteredLogs = filteredLogs.filter(
+        (log) => log.access_granted === filters.access_granted
+      );
+    }
+
+    // Filter by resource
+    if (filters.resource) {
+      filteredLogs = filteredLogs.filter((log) =>
+        log.resource.toLowerCase().includes(filters.resource.toLowerCase())
+      );
+    }
+
+    // Filter by user email
+    if (filters.user_email) {
+      filteredLogs = filteredLogs.filter((log) =>
+        log.user_email?.toLowerCase().includes(filters.user_email.toLowerCase())
+      );
+    }
+
+    // Filter by device ID
+    if (filters.device_id) {
+      filteredLogs = filteredLogs.filter((log) =>
+        log.device_id?.includes(filters.device_id)
+      );
+    }
+
+    // Filter by folder ID
+    if (filters.folder_id) {
+      filteredLogs = filteredLogs.filter((log) =>
+        log.folder_id?.includes(filters.folder_id)
+      );
+    }
+
+    // Filter by status (for drive requests)
+    if (filters.status) {
+      filteredLogs = filteredLogs.filter(
+        (log) => log.status === filters.status
+      );
+    }
+
+    // Filter by date range
+    if (filters.start_time) {
+      const startDate = new Date(filters.start_time).getTime();
+      filteredLogs = filteredLogs.filter(
+        (log) => new Date(log.timestamp).getTime() >= startDate
+      );
+    }
+
+    if (filters.end_time) {
+      const endDate = new Date(filters.end_time).getTime();
+      filteredLogs = filteredLogs.filter(
+        (log) => new Date(log.timestamp).getTime() <= endDate
+      );
+    }
+
+    // Calculate total pages
+    const totalFilteredPages =
+      Math.ceil(filteredLogs.length / itemsPerPage) || 1;
+    setTotalPages(totalFilteredPages);
+
+    // Adjust current page if it's now out of bounds
+    if (currentPage > totalFilteredPages) {
+      setCurrentPage(1);
+    }
+
+    // Apply pagination
+    const startIdx = (currentPage - 1) * itemsPerPage;
+    const endIdx = startIdx + itemsPerPage;
+    const paginatedLogs = filteredLogs.slice(startIdx, endIdx);
+
+    // Update logs state
+    setLogs(paginatedLogs);
+  };
+
+  // Initial fetch on component mount
+  useEffect(() => {
+    fetchAllLogs();
+  }, []);
+
+  // Re-apply filters when page changes
+  useEffect(() => {
+    if (allLogs.length > 0) {
+      applyFilters();
+    }
+  }, [currentPage]);
+
   const handleFilterChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
 
-    setFilters((prev) => ({
-      ...prev,
-      [name]:
-        name === "access_granted"
-          ? value === ""
-            ? undefined
-            : value === "true"
-          : value,
-    }));
+    if (name === "access_granted") {
+      setFilters((prev) => ({
+        ...prev,
+        [name]: value === "" ? undefined : value === "true",
+      }));
+    } else {
+      setFilters((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
   };
 
   const handleApplyFilters = (e: React.FormEvent) => {
     e.preventDefault();
     setCurrentPage(1); // Reset to first page when applying filters
-    fetchLogs();
+    applyFilters();
   };
 
   const handleResetFilters = () => {
@@ -258,6 +311,15 @@ const AccessLogsPage: React.FC = () => {
       status: "",
     });
     setCurrentPage(1);
+
+    // Wait for state update before applying filters
+    setTimeout(() => {
+      applyFilters(allLogs);
+    }, 0);
+  };
+
+  const refreshLogs = () => {
+    fetchAllLogs();
   };
 
   const getAccessTypeStyle = (accessType?: AccessType) => {
@@ -575,21 +637,69 @@ const AccessLogsPage: React.FC = () => {
           <div className="px-6 py-6 bg-gray-50">
             <form onSubmit={handleApplyFilters}>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Access Granted filter */}
                 <div>
                   <label
-                    htmlFor="log_type"
+                    htmlFor="access_granted"
                     className="block text-sm font-medium text-gray-700 mb-1"
                   >
-                    Log Type
+                    Access Status
                   </label>
                   <select
-                    id="log_type"
-                    name="log_type"
+                    id="access_granted"
+                    name="access_granted"
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    value={
+                      filters.access_granted === undefined
+                        ? ""
+                        : String(filters.access_granted)
+                    }
+                    onChange={handleFilterChange}
+                  >
+                    <option value="">All</option>
+                    <option value="true">Granted</option>
+                    <option value="false">Denied</option>
+                  </select>
+                </div>
+
+                {/* Resource filter */}
+                <div>
+                  <label
+                    htmlFor="resource"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Resource
+                  </label>
+                  <input
+                    type="text"
+                    id="resource"
+                    name="resource"
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    value={filters.resource}
+                    onChange={handleFilterChange}
+                    placeholder="Search resources"
+                  />
+                </div>
+
+                {/* Start Time filter */}
+                <div>
+                  <label
+                    htmlFor="start_time"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Start Date
+                  </label>
+                  <input
+                    type="datetime-local"
+                    id="start_time"
+                    name="start_time"
                     className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     value={filters.start_time}
                     onChange={handleFilterChange}
                   />
                 </div>
+
+                {/* End Time filter */}
                 <div>
                   <label
                     htmlFor="end_time"
@@ -606,7 +716,68 @@ const AccessLogsPage: React.FC = () => {
                     onChange={handleFilterChange}
                   />
                 </div>
+
+                {/* Log Type filter */}
+                <div>
+                  <label
+                    htmlFor="log_type"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Log Type
+                  </label>
+                  <select
+                    id="log_type"
+                    name="log_type"
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    value={filters.log_type}
+                    onChange={handleFilterChange}
+                  >
+                    <option value="">All Types</option>
+                    <option value="access">Access</option>
+                    <option value="drive_request">Drive Request</option>
+                    <option value="permission">Permission</option>
+                  </select>
+                </div>
+
+                {/* User Email filter */}
+                <div>
+                  <label
+                    htmlFor="user_email"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    User Email
+                  </label>
+                  <input
+                    type="text"
+                    id="user_email"
+                    name="user_email"
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    value={filters.user_email}
+                    onChange={handleFilterChange}
+                    placeholder="Filter by email"
+                  />
+                </div>
+
+                {/* Folder ID filter */}
+                <div>
+                  <label
+                    htmlFor="folder_id"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Folder ID
+                  </label>
+                  <input
+                    type="text"
+                    id="folder_id"
+                    name="folder_id"
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    value={filters.folder_id}
+                    onChange={handleFilterChange}
+                    placeholder="Filter by folder ID"
+                  />
+                </div>
               </div>
+
               <div className="flex justify-end space-x-2 mt-6">
                 <button
                   type="button"
@@ -731,7 +902,7 @@ const AccessLogsPage: React.FC = () => {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {logs.map((log) => (
                       <tr
-                        key={log.id}
+                        key={log.clientId || `${log.log_type}_${log.id}`}
                         className="hover:bg-gray-50 transition-colors duration-150"
                       >
                         <td className="px-3 py-3 text-sm text-gray-500">
@@ -942,7 +1113,9 @@ const AccessLogsPage: React.FC = () => {
                               log.decision_by_email) ||
                             (log.log_type === "permission" && log.granted_by)
                           ) && (
-                            <div className="text-xs text-gray-500">No info found</div>
+                            <div className="text-xs text-gray-500">
+                              No info found
+                            </div>
                           )}
                         </td>
                       </tr>
