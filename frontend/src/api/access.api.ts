@@ -413,13 +413,32 @@ const AccessApi = {
    */
   revokePermission: async (permissionId: string): Promise<any> => {
     try {
+      console.log(`Revoking permission with ID: ${permissionId}`);
+
+      // Make API call to revoke the permission
       const response = await api.delete<any>(
         `/access/google-drive/permissions/${permissionId}`
       );
+
+      // Log success response
+      console.log("Permission successfully revoked:", response.data);
+
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
+      // Enhanced error logging
       console.error("Error revoking permission:", error);
-      throw error;
+
+      if (error.response) {
+        console.error("Error response status:", error.response.status);
+        console.error("Error response data:", error.response.data);
+      }
+
+      // Throw a more detailed error message
+      throw new Error(
+        error.response?.data?.detail ||
+          error.message ||
+          "Failed to revoke permission"
+      );
     }
   },
 };

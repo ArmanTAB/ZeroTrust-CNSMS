@@ -165,30 +165,15 @@ class GoogleDriveService:
             logger.error(f"Error checking access: {str(e)}")
             return False, str(e)
     
-    def revoke_access(self, folder_id, user_email):
-        """Revoke access to a folder for a user"""
+    def revoke_access(self, folder_id, permission_id):
+        """Revoke access to a folder for a specific permission"""
         if not self.service:
             logger.error("Not authenticated with Google Drive")
             raise Exception("Not authenticated with Google Drive")
             
         try:
-            # First, find the permission ID for this user
-            permissions = self.service.permissions().list(
-                fileId=folder_id,
-                fields="permissions(id, emailAddress)",
-                supportsAllDrives=True
-            ).execute()
+            logger.info(f"Revoking permission {permission_id} for folder {folder_id}")
             
-            permission_id = None
-            for perm in permissions.get('permissions', []):
-                if perm.get('emailAddress') == user_email:
-                    permission_id = perm.get('id')
-                    break
-            
-            if not permission_id:
-                logger.warning(f"No permission found for {user_email} on folder {folder_id}")
-                return False
-                
             # Revoke the permission
             self.service.permissions().delete(
                 fileId=folder_id,
@@ -196,10 +181,13 @@ class GoogleDriveService:
                 supportsAllDrives=True
             ).execute()
             
-            logger.info(f"Revoked access for {user_email} to folder {folder_id}")
+            logger.info(f"Successfully revoked permission {permission_id} for folder {folder_id}")
             return True
-        except HttpError as e:
+        except Exception as e:
             logger.error(f"Error revoking access: {str(e)}")
+            # Log detailed error information for debugging
+            import traceback
+            logger.error(f"Error details: {traceback.format_exc()}")
             raise Exception(f"Failed to revoke access: {str(e)}")
     
     def sync_folder_mappings(self):

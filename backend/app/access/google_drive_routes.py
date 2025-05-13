@@ -1109,6 +1109,9 @@ async def revoke_permission(
     current_user: Annotated[User, Depends(get_current_user)]
 ):
     """Revoke a Google Drive permission"""
+    # Log the permission ID being requested
+    logger.info(f"Revoking permission with ID: {permission_id}")
+    
     # Check if user has admin privileges
     if current_user.role not in ["admin", "security_analyst"]:
         raise HTTPException(
@@ -1120,19 +1123,45 @@ async def revoke_permission(
         # Get Google Drive service
         drive_service = GoogleDriveService.get_instance()
         
-        # Extract folder ID from permission ID (you may need to adjust this based on your implementation)
-        parts = permission_id.split(':')
-        if len(parts) != 2:
+        # Find the permission in the active permissions
+        folders = await db.db.folder_mappings.find({}).to_list(length=1000)
+        
+        folder_id = None
+        perm_id = permission_id
+        
+        # For each folder, get permissions and find the one with matching ID
+        for folder in folders:
+            f_id = folder["folder_id"]
+            
+            # Skip placeholder folders
+            if f_id.startswith("placeholder_"):
+                continue
+                
+            try:
+                folder_perms = drive_service.get_folder_permissions(f_id)
+                
+                # Look for the permission ID
+                for perm in folder_perms:
+                    if perm["id"] == permission_id:
+                        folder_id = f_id
+                        logger.info(f"Found permission {permission_id} in folder {folder_id}")
+                        break
+                
+                if folder_id:
+                    break
+            except Exception as e:
+                logger.error(f"Error getting permissions for folder {f_id}: {str(e)}")
+        
+        if not folder_id:
+            logger.error(f"Permission {permission_id} not found in any folder")
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid permission ID format"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Permission not found"
             )
             
-        folder_id = parts[0]
-        permission_id = parts[1]
-        
         # Revoke the permission
-        drive_service.revoke_access(folder_id, permission_id)
+        logger.info(f"Revoking permission {perm_id} from folder {folder_id}")
+        drive_service.revoke_access(folder_id, perm_id)
         
         # No content to return on success
         return

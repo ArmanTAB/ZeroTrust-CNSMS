@@ -468,21 +468,6 @@ const GoogleDriveManagement: React.FC = () => {
   ): Promise<void> => {
     setPermissionToRevoke(permissionId);
     setShowRevokeConfirmModal(true);
-
-    try {
-      // Call API to revoke the permission
-      await AccessApi.revokePermission(permissionId);
-
-      // Remove the permission from the state
-      setActivePermissions((prev) =>
-        prev.filter((permission) => permission.id !== permissionId)
-      );
-
-      showToast("Permission revoked successfully", "success");
-    } catch (error) {
-      console.error("Error revoking permission:", error);
-      showToast("Failed to revoke permission", "error");
-    }
   };
 
   const renderActivePermissions = (): JSX.Element => (
@@ -642,12 +627,6 @@ const GoogleDriveManagement: React.FC = () => {
                     scope="col"
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                   >
-                    Expires
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
                     Actions
                   </th>
                 </tr>
@@ -690,17 +669,6 @@ const GoogleDriveManagement: React.FC = () => {
                       <div className="text-sm text-gray-900">
                         {new Date(permission.granted_at).toLocaleString()}
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {permission.expiration ? (
-                        <div className="text-sm text-gray-900">
-                          {new Date(permission.expiration).toLocaleString()}
-                        </div>
-                      ) : (
-                        <span className="text-sm text-gray-500">
-                          No expiration
-                        </span>
-                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <button
@@ -1595,12 +1563,25 @@ const GoogleDriveManagement: React.FC = () => {
                 <button
                   type="button"
                   className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-[#7A2048] text-base font-medium text-white hover:bg-[#7A2048]/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#7A2048] sm:ml-3 sm:w-auto sm:text-sm"
-                  onClick={handleRejectRequest}
-                  disabled={processingRequest === selectedRequest?.id}
+                  onClick={async () => {
+                    if (permissionToRevoke) {
+                      try {
+                        await AccessApi.revokePermission(permissionToRevoke);
+                        setActivePermissions((prev) =>
+                          prev.filter((p) => p.id !== permissionToRevoke)
+                        );
+                        showToast("Permission revoked successfully", "success");
+                      } catch (error) {
+                        console.error("Error revoking permission:", error);
+                        showToast("Failed to revoke permission", "error");
+                      } finally {
+                        setShowRevokeConfirmModal(false);
+                        setPermissionToRevoke(null);
+                      }
+                    }
+                  }}
                 >
-                  {processingRequest === selectedRequest?.id
-                    ? "Rejecting..."
-                    : "Reject"}
+                  Revoke
                 </button>
                 <button
                   type="button"
