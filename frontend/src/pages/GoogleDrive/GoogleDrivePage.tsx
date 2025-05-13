@@ -1,9 +1,37 @@
 // frontend/src/pages/GoogleDrive/GoogleDrivePage.tsx
-import React from "react";
+import React, { useState, useEffect } from "react";
 import MainLayout from "../../components/Layout/MainLayout";
 import GoogleDriveManagement from "../../components/GoogleDrive/GoogleDriveManagement";
+import { useAuth } from "../../store/AuthContext";
+import AccessApi from "../../api/access.api";
 
 const GoogleDrivePage: React.FC = () => {
+  const { user } = useAuth();
+  const [autoSyncStarted, setAutoSyncStarted] = useState(false);
+  const isAdmin = user?.role === "admin" || user?.role === "security_analyst";
+
+  // Perform initial background sync when the page loads (for admins only)
+  useEffect(() => {
+    const performInitialSync = async () => {
+      if (isAdmin && !autoSyncStarted) {
+        setAutoSyncStarted(true);
+
+        try {
+          // First sync folders
+          await AccessApi.syncGoogleDriveFolders();
+
+          // Then sync Gmail
+          await AccessApi.syncGmailShareRequests();
+        } catch (error) {
+          console.error("Background sync error:", error);
+          // Silent failure - the component will handle retries
+        }
+      }
+    };
+
+    performInitialSync();
+  }, [isAdmin, autoSyncStarted]);
+
   return (
     <MainLayout>
       <div className="mb-6">
@@ -59,11 +87,29 @@ const GoogleDrivePage: React.FC = () => {
               About Zero Trust Google Drive Access
             </h2>
             <p className="text-gray-600 mt-1">
-              This page allows to manage accesses to protected
-              Google Drive folders using Zero Trust security principles. All
-              access is granted on a least-privilege, time-limited basis with
-              continuous verification.
+              This page allows to manage accesses to protected Google Drive
+              folders using Zero Trust security principles. All access is
+              granted on a least-privilege, time-limited basis with continuous
+              verification.
             </p>
+            {isAdmin && (
+              <div className="mt-2 text-sm text-green-600 flex items-center">
+                <svg
+                  className="w-4 h-4 mr-1"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+                Auto-sync enabled: Updates every 15 seconds
+              </div>
+            )}
           </div>
         </div>
 
@@ -76,7 +122,7 @@ const GoogleDrivePage: React.FC = () => {
               <h3 className="ml-2 font-medium text-gray-800">Request Access</h3>
             </div>
             <p className="text-sm text-gray-600">
-              Browse available folders and accesses based on work
+              Browse available folders and request access based on work
               requirements.
             </p>
           </div>

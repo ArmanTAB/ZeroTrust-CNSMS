@@ -1,4 +1,4 @@
-// src/api/access.api.ts
+// src/api/access.api.ts (Modified with updated requestGoogleDriveAccess function)
 import api from "./api";
 import {
   AccessLog,
@@ -104,8 +104,13 @@ const AccessApi = {
 
   /**
    * Request access to a Google Drive folder
+   * @param folderId The ID of the folder to request access to
+   * @param emailAddress Optional email address to grant access to (defaults to current user)
    */
-  requestGoogleDriveAccess: async (folderId: string): Promise<any> => {
+  requestGoogleDriveAccess: async (
+    folderId: string,
+    emailAddress?: string
+  ): Promise<any> => {
     // Get current device ID from local storage or generate a new one
     const getDeviceId = () => {
       let deviceId = localStorage.getItem("device_id");
@@ -117,13 +122,22 @@ const AccessApi = {
       return deviceId;
     };
 
+    // Create the resource string, including the email if provided
+    let resource = `google-drive:folder:${folderId}`;
+    if (emailAddress) {
+      resource += `:${emailAddress}`;
+    }
+
     const accessData = {
       device_id: getDeviceId(),
       ip_address: "", // Will be determined by backend
       user_agent: navigator.userAgent,
-      resource: `google-drive:folder:${folderId}`,
+      resource: resource,
       access_type: AccessType.READ,
-      context: { timestamp: new Date().toISOString() },
+      context: {
+        timestamp: new Date().toISOString(),
+        email_for_access: emailAddress, // Include email in context
+      },
     };
 
     try {

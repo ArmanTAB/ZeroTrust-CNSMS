@@ -1,5 +1,5 @@
 // frontend/src/components/GoogleDrive/GoogleDriveManagement.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../store/AuthContext";
 import { useToast } from "../../store/ToastContext";
 import AccessApi from "../../api/access.api";
@@ -46,12 +46,16 @@ const GoogleDriveManagement: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
-  const [accessRequesting, setAccessRequesting] = useState<string | null>(null);
+  // State for access request modal
+  const [showRequestModal, setShowRequestModal] = useState<boolean>(false);
+  const [selectedFolder, setSelectedFolder] = useState<Folder | null>(null);
+  const [requestEmail, setRequestEmail] = useState<string>("");
+  const [requestingAccess, setRequestingAccess] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<"folders" | "requests">("folders");
+  const [rejectReason, setRejectReason] = useState<string>("");
   const [processingRequest, setProcessingRequest] = useState<string | null>(
     null
   );
-  const [activeTab, setActiveTab] = useState<"folders" | "requests">("folders");
-  const [rejectReason, setRejectReason] = useState<string>("");
   const [showRejectModal, setShowRejectModal] = useState<boolean>(false);
   const [selectedRequest, setSelectedRequest] = useState<AccessRequest | null>(
     null
@@ -63,16 +67,44 @@ const GoogleDriveManagement: React.FC = () => {
   const [syncingFolders, setSyncingFolders] = useState<boolean>(false);
   const [syncingGmail, setSyncingGmail] = useState<boolean>(false);
   const [scanningFolders, setScanningFolders] = useState<boolean>(false);
+
   const [error, setError] = useState<string | null>(null);
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(true);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+
+  // Refs for tracking intervals
+  const folderSyncIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const gmailSyncIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const isAdmin = user?.role === "admin" || user?.role === "security_analyst";
 
-  // If user is admin, show the requests tab by default
+  // Set up auto-sync intervals
   useEffect(() => {
-    if (isAdmin) {
-      setActiveTab("requests");
+    if (autoSyncEnabled && isAdmin) {
+      // Set up intervals for auto-syncing
+      folderSyncIntervalRef.current = setInterval(() => {
+        if (activeTab === "folders") {
+          fetchFolders(false); // silent refresh
+        }
+      }, 15000); // 15 seconds
+
+      gmailSyncIntervalRef.current = setInterval(() => {
+        if (activeTab === "requests") {
+          handleSyncGmailRequests(true); // silent refresh
+        }
+      }, 15000); // 15 seconds
     }
-  }, [isAdmin]);
+
+    // Cleanup intervals when component unmounts or auto-sync is disabled
+    return () => {
+      if (folderSyncIntervalRef.current) {
+        clearInterval(folderSyncIntervalRef.current);
+      }
+      if (gmailSyncIntervalRef.current) {
+        clearInterval(gmailSyncIntervalRef.current);
+      }
+    };
+  }, [autoSyncEnabled, activeTab, isAdmin]);
 
   useEffect(() => {
     if (activeTab === "folders") {
@@ -83,8 +115,10 @@ const GoogleDriveManagement: React.FC = () => {
     }
   }, [activeTab]);
 
-  const fetchFolders = async (): Promise<void> => {
-    setLoading(true);
+  const fetchFolders = async (showLoadingState = true): Promise<void> => {
+    if (showLoadingState) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const response = await AccessApi.getGoogleDriveFolders();
@@ -97,23 +131,34 @@ const GoogleDriveManagement: React.FC = () => {
 
       console.log("Fetched folders:", foldersWithLabels);
       setFolders(foldersWithLabels);
+
+      if (!showLoadingState) {
+        setLastSyncTime(new Date());
+      }
     } catch (error) {
       console.error("Error fetching folders:", error);
-      setError(
-        "Failed to fetch Google Drive folders. Please make sure the service account has access to your Google Drive."
-      );
-      showToast("Failed to fetch Google Drive folders", "error");
+      if (showLoadingState) {
+        setError(
+          "Failed to fetch Google Drive folders. Please make sure the service account has access to your Google Drive."
+        );
+        showToast("Failed to fetch Google Drive folders", "error");
+      }
     } finally {
-      setLoading(false);
+      if (showLoadingState) {
+        setLoading(false);
+      }
     }
   };
 
   const fetchAccessRequests = async (
-    statusOverride?: string
+    statusOverride?: string,
+    silent = false
   ): Promise<void> => {
     if (!isAdmin) return;
 
-    setLoading(true);
+    if (!silent) {
+      setLoading(true);
+    }
     setError(null);
     try {
       // Use the override status value if provided, otherwise use the current filter status
@@ -138,19 +183,30 @@ const GoogleDriveManagement: React.FC = () => {
         : requests;
 
       setAccessRequests(filteredRequests);
+
+      if (silent) {
+        setLastSyncTime(new Date());
+      }
     } catch (error) {
       console.error("Error fetching access requests:", error);
 
-      // More detailed error message
-      if (error instanceof Error) {
-        setError(`Failed to fetch access requests: ${error.message}`);
-        showToast(`Failed to fetch access requests: ${error.message}`, "error");
-      } else {
-        setError("Failed to fetch access requests");
-        showToast("Failed to fetch access requests", "error");
+      if (!silent) {
+        // More detailed error message
+        if (error instanceof Error) {
+          setError(`Failed to fetch access requests: ${error.message}`);
+          showToast(
+            `Failed to fetch access requests: ${error.message}`,
+            "error"
+          );
+        } else {
+          setError("Failed to fetch access requests");
+          showToast("Failed to fetch access requests", "error");
+        }
       }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -162,60 +218,94 @@ const GoogleDriveManagement: React.FC = () => {
     }, 0);
   };
 
-  const handleSyncGmailRequests = async (): Promise<void> => {
+  const handleSyncGmailRequests = async (silent = false): Promise<void> => {
     if (!isAdmin) return;
 
-    setSyncingGmail(true);
+    if (!silent) {
+      setSyncingGmail(true);
+    }
+
     try {
       const result = await AccessApi.syncGmailShareRequests();
-      showToast(
-        `Successfully synced ${result.total_found} Gmail requests (${result.new_created} new)`,
-        "success"
-      );
+
+      if (!silent) {
+        showToast(
+          `Successfully synced ${result.total_found} Gmail requests (${result.new_created} new)`,
+          "success"
+        );
+      }
 
       // Refresh access requests
       if (activeTab === "requests") {
-        await fetchAccessRequests();
+        await fetchAccessRequests(undefined, silent);
       }
+
+      setLastSyncTime(new Date());
     } catch (err: any) {
       console.error("Error syncing Gmail requests:", err);
-      showToast(err.message || "Error syncing Gmail requests", "error");
+      if (!silent) {
+        showToast(err.message || "Error syncing Gmail requests", "error");
+      }
     } finally {
-      setSyncingGmail(false);
+      if (!silent) {
+        setSyncingGmail(false);
+      }
     }
   };
 
-  const handleRequestAccess = async (
-    folderId: string,
-    folderName: string
-  ): Promise<void> => {
-    setAccessRequesting(folderId);
+  const handleRequestAccess = async (folder: Folder): Promise<void> => {
+    setSelectedFolder(folder);
+    setShowRequestModal(true);
+  };
+
+  const submitAccessRequest = async (): Promise<void> => {
+    if (!selectedFolder || !requestEmail) return;
+
+    setRequestingAccess(true);
     try {
-      const result = await AccessApi.requestGoogleDriveAccess(folderId);
+      // Create a custom format to include the email for permission
+      const folderId = selectedFolder.id;
+      const resource = `google-drive:folder:${folderId}:${requestEmail}`;
+
+      const result = await AccessApi.requestGoogleDriveAccess(
+        folderId,
+        requestEmail
+      );
 
       // Check result status
       if (result.status === "success" && result.access_granted) {
         showToast(
-          result.message || "You already have access to this folder",
+          result.message || `Access granted to ${requestEmail}`,
           "success"
         );
+
+        // Close the modal after successful request
+        setShowRequestModal(false);
       } else if (result.status === "pending") {
-        showToast("Access request submitted and is pending approval", "info");
+        showToast(
+          `Access request for ${requestEmail} submitted and is pending approval`,
+          "info"
+        );
 
         // Update folder in state to show pending request
         setFolders((prev) =>
           prev.map((f) =>
-            f.id === folderId ? { ...f, hasPendingRequest: true } : f
+            f.id === selectedFolder.id ? { ...f, hasPendingRequest: true } : f
           )
         );
+
+        // Close the modal after successful request
+        setShowRequestModal(false);
       } else {
         showToast(result.message || "Request submitted", "info");
+        // Close the modal after successful request
+        setShowRequestModal(false);
       }
     } catch (error) {
       console.error("Error requesting access:", error);
       showToast("Failed to request access", "error");
     } finally {
-      setAccessRequesting(null);
+      setRequestingAccess(false);
     }
   };
 
@@ -302,26 +392,40 @@ const GoogleDriveManagement: React.FC = () => {
     }
   };
 
-  const handleSyncGoogleDriveFolders = async (): Promise<void> => {
+  const handleSyncGoogleDriveFolders = async (
+    silent = false
+  ): Promise<void> => {
     if (!isAdmin) return;
 
-    setSyncingFolders(true);
+    if (!silent) {
+      setSyncingFolders(true);
+    }
+
     try {
       const result = await AccessApi.syncGoogleDriveFolders();
-      showToast("Successfully synchronized Google Drive folders", "success");
+
+      if (!silent) {
+        showToast("Successfully synchronized Google Drive folders", "success");
+      }
 
       // Refresh folders
-      await fetchFolders();
+      await fetchFolders(false);
 
       // Also refresh access requests as they might reference the updated folders
       if (activeTab === "requests") {
-        await fetchAccessRequests();
+        await fetchAccessRequests(undefined, true);
       }
+
+      setLastSyncTime(new Date());
     } catch (error) {
       console.error("Error syncing Google Drive folders:", error);
-      showToast("Failed to sync Google Drive folders", "error");
+      if (!silent) {
+        showToast("Failed to sync Google Drive folders", "error");
+      }
     } finally {
-      setSyncingFolders(false);
+      if (!silent) {
+        setSyncingFolders(false);
+      }
     }
   };
 
@@ -403,9 +507,23 @@ const GoogleDriveManagement: React.FC = () => {
       setScanningFolders(false);
     }
   };
+
   // Apply search filter
   const applySearchFilter = (): void => {
     fetchAccessRequests();
+  };
+
+  const toggleAutoSync = () => {
+    setAutoSyncEnabled(!autoSyncEnabled);
+
+    // If enabling, immediately sync both
+    if (!autoSyncEnabled) {
+      if (activeTab === "folders") {
+        handleSyncGoogleDriveFolders(true);
+      } else {
+        handleSyncGmailRequests(true);
+      }
+    }
   };
 
   const renderErrorMessage = (): JSX.Element | null => {
@@ -446,14 +564,14 @@ const GoogleDriveManagement: React.FC = () => {
   const renderFolders = (): JSX.Element => (
     <>
       {isAdmin && (
-        <div className="mb-4">
+        <div className="mb-4 flex flex-wrap gap-2">
           <button
             className={`px-4 py-2 rounded-md ${
               syncingFolders
                 ? "bg-gray-400 cursor-wait"
                 : "bg-[#1E2761] hover:bg-[#1E2761]/80 text-white"
             }`}
-            onClick={handleSyncGoogleDriveFolders}
+            onClick={() => handleSyncGoogleDriveFolders()}
             disabled={syncingFolders}
           >
             {syncingFolders ? (
@@ -484,6 +602,52 @@ const GoogleDriveManagement: React.FC = () => {
               "Sync Google Drive Folders"
             )}
           </button>
+
+          {/* Auto-sync toggle button */}
+          <button
+            className={`px-4 py-2 rounded-md flex items-center ${
+              autoSyncEnabled
+                ? "bg-green-600 hover:bg-green-700 text-white"
+                : "bg-gray-300 hover:bg-gray-400 text-gray-800"
+            }`}
+            onClick={toggleAutoSync}
+          >
+            <svg
+              className={`w-4 h-4 mr-2 ${
+                autoSyncEnabled ? "text-white" : "text-gray-600"
+              }`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            {autoSyncEnabled ? "Auto-Sync: On" : "Auto-Sync: Off"}
+          </button>
+
+          {lastSyncTime && (
+            <div className="px-4 py-2 text-sm text-gray-500 flex items-center">
+              <svg
+                className="w-4 h-4 mr-2 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              Last synced: {lastSyncTime.toLocaleTimeString()}
+            </div>
+          )}
         </div>
       )}
 
@@ -516,7 +680,7 @@ const GoogleDriveManagement: React.FC = () => {
               <button
                 type="button"
                 className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-[#408EC6] hover:bg-[#408EC6]/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#408EC6]"
-                onClick={handleSyncGoogleDriveFolders}
+                onClick={() => handleSyncGoogleDriveFolders()}
               >
                 <svg
                   className="-ml-1 mr-2 h-5 w-5"
@@ -574,23 +738,16 @@ const GoogleDriveManagement: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={() => handleRequestAccess(folder.id, folder.name)}
-                  disabled={
-                    accessRequesting === folder.id ||
-                    Boolean(folder.hasPendingRequest)
-                  }
+                  onClick={() => handleRequestAccess(folder)}
+                  disabled={Boolean(folder.hasPendingRequest)}
                   className={`w-full py-2 px-4 rounded-md ${
                     folder.hasPendingRequest
                       ? "bg-yellow-100 text-yellow-800 cursor-default"
-                      : accessRequesting === folder.id
-                      ? "bg-[#408EC6]/70 text-white cursor-wait"
                       : "bg-[#408EC6] hover:bg-[#408EC6]/80 text-white"
                   }`}
                 >
                   {folder.hasPendingRequest
                     ? "Request Pending"
-                    : accessRequesting === folder.id
-                    ? "Requesting..."
                     : "Request Access"}
                 </button>
               </div>
@@ -701,31 +858,50 @@ const GoogleDriveManagement: React.FC = () => {
       {/* Add the sync buttons at the top of the requests tab too */}
       {isAdmin && (
         <div className="mb-4 flex flex-wrap gap-2">
+          {/* Removed the "Sync Google Drive Folders" button as requested */}
+
+          {/* Only show the Sync Gmail button when auto-sync is OFF */}
+          {!autoSyncEnabled && (
+            <button
+              className={`px-4 py-2 rounded-md ${
+                syncingGmail
+                  ? "bg-gray-400 cursor-wait"
+                  : "bg-[#7A2048] hover:bg-[#7A2048]/80 text-white"
+              }`}
+              onClick={() => handleSyncGmailRequests()}
+              disabled={syncingGmail}
+            >
+              {syncingGmail ? "Syncing Gmail..." : "Sync Gmail"}
+            </button>
+          )}
+
+          {/* Auto-sync toggle button */}
           <button
-            className={`px-4 py-2 rounded-md ${
-              syncingFolders
-                ? "bg-gray-400 cursor-wait"
-                : "bg-[#1E2761] hover:bg-[#1E2761]/80 text-white"
+            className={`px-4 py-2 rounded-md flex items-center ${
+              autoSyncEnabled
+                ? "bg-green-600 hover:bg-green-700 text-white"
+                : "bg-gray-300 hover:bg-gray-400 text-gray-800"
             }`}
-            onClick={handleSyncGoogleDriveFolders}
-            disabled={syncingFolders}
+            onClick={toggleAutoSync}
           >
-            {syncingFolders
-              ? "Syncing Folders..."
-              : "Sync Google Drive Folders"}
+            <svg
+              className={`w-4 h-4 mr-2 ${
+                autoSyncEnabled ? "text-white" : "text-gray-600"
+              }`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            {autoSyncEnabled ? "Auto-Sync: On" : "Auto-Sync: Off"}
           </button>
 
-          <button
-            className={`px-4 py-2 rounded-md ${
-              syncingGmail
-                ? "bg-gray-400 cursor-wait"
-                : "bg-[#7A2048] hover:bg-[#7A2048]/80 text-white"
-            }`}
-            onClick={handleSyncGmailRequests}
-            disabled={syncingGmail}
-          >
-            {syncingGmail ? "Syncing Gmail..." : "Sync Gmail"}
-          </button>
           <button
             className="px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300 text-gray-800"
             onClick={handleRefreshRequests}
@@ -733,6 +909,25 @@ const GoogleDriveManagement: React.FC = () => {
           >
             {loading ? "Loading..." : "Refresh"}
           </button>
+
+          {lastSyncTime && (
+            <div className="px-4 py-2 text-sm text-gray-500 flex items-center">
+              <svg
+                className="w-4 h-4 mr-2 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              Last synced: {lastSyncTime.toLocaleTimeString()}
+            </div>
+          )}
         </div>
       )}
 
@@ -763,17 +958,20 @@ const GoogleDriveManagement: React.FC = () => {
               >
                 Refresh Requests
               </button>
-              <button
-                className={`px-4 py-2 rounded-md text-sm ${
-                  syncingGmail
-                    ? "bg-gray-400 cursor-wait"
-                    : "bg-[#7A2048] hover:bg-[#7A2048]/80 text-white"
-                }`}
-                onClick={handleSyncGmailRequests}
-                disabled={syncingGmail}
-              >
-                {syncingGmail ? "Syncing Gmail..." : "Sync Gmail"}
-              </button>
+              {/* Only show the Sync Gmail button when auto-sync is OFF */}
+              {!autoSyncEnabled && (
+                <button
+                  className={`px-4 py-2 rounded-md text-sm ${
+                    syncingGmail
+                      ? "bg-gray-400 cursor-wait"
+                      : "bg-[#7A2048] hover:bg-[#7A2048]/80 text-white"
+                  }`}
+                  onClick={() => handleSyncGmailRequests()}
+                  disabled={syncingGmail}
+                >
+                  {syncingGmail ? "Syncing Gmail..." : "Sync Gmail"}
+                </button>
+              )}
             </div>
           </div>
         ) : (
@@ -1068,6 +1266,143 @@ const GoogleDriveManagement: React.FC = () => {
                   type="button"
                   className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#408EC6] sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                   onClick={() => setShowRejectModal(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Request Access Modal */}
+      {showRequestModal && selectedFolder && (
+        <div
+          className="fixed z-10 inset-0 overflow-y-auto"
+          aria-labelledby="modal-title"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div
+              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+              aria-hidden="true"
+              onClick={() => setShowRequestModal(false)}
+            ></div>
+
+            <span
+              className="hidden sm:inline-block sm:align-middle sm:h-screen"
+              aria-hidden="true"
+            >
+              &#8203;
+            </span>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-[#408EC6]/10 sm:mx-0 sm:h-10 sm:w-10">
+                    <svg
+                      className="h-6 w-6 text-[#408EC6]"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                    <h3
+                      className="text-lg leading-6 font-medium text-gray-900"
+                      id="modal-title"
+                    >
+                      Request Access to {selectedFolder.name}
+                    </h3>
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-500 mb-4">
+                        Please enter the email address that should receive read
+                        access to this folder.
+                      </p>
+
+                      <div>
+                        <label
+                          htmlFor="request-email"
+                          className="block text-sm font-medium text-gray-700 mb-1"
+                        >
+                          Email Address
+                        </label>
+                        <input
+                          type="email"
+                          id="request-email"
+                          name="request-email"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#408EC6] focus:border-[#408EC6] sm:text-sm"
+                          placeholder="email@example.com"
+                          value={requestEmail}
+                          onChange={(e) => setRequestEmail(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="mt-4">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                            ${selectedFolder.sensitivityLabel?.class || ""}`}
+                        >
+                          {selectedFolder.sensitivityLabel?.label ||
+                            selectedFolder.sensitivity}
+                        </span>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Access to this folder is managed based on Zero Trust
+                          security principles. All requests are logged and
+                          monitored.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button
+                  type="button"
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-[#408EC6] text-base font-medium text-white hover:bg-[#408EC6]/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#408EC6] sm:ml-3 sm:w-auto sm:text-sm"
+                  onClick={submitAccessRequest}
+                  disabled={requestingAccess || !requestEmail}
+                >
+                  {requestingAccess ? (
+                    <>
+                      <svg
+                        className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                      </svg>
+                      Processing...
+                    </>
+                  ) : (
+                    "Submit Request"
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#408EC6] sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  onClick={() => setShowRequestModal(false)}
                 >
                   Cancel
                 </button>
