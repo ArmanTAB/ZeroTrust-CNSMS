@@ -697,8 +697,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         )}
 
         {/* Main content area */}
-        <main className="flex-1 overflow-y-auto bg-gray-50">
-          <div className="container mx-auto px-4 py-6 md:px-6 md:py-8">
+        <main className="flex-1 overflow-y-auto bg-gray-50 w-full">
+          <div className="container mx-auto px-4 py-6 md:px-6 md:py-8 max-w-full">
             {children}
           </div>
         </main>

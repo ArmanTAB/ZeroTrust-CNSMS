@@ -631,7 +631,7 @@ const GoogleDriveManagement: React.FC = () => {
             htmlFor="search"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
-            Search
+            Searchsss
           </label>
           <div className="flex">
             <input
@@ -951,10 +951,6 @@ const GoogleDriveManagement: React.FC = () => {
                                 {request.decision_time && (
                                   <>
                                     {" "}
-                                    on{" "}
-                                    {new Date(
-                                      request.decision_time
-                                    ).toLocaleString()}
                                   </>
                                 )}
                               </span>
