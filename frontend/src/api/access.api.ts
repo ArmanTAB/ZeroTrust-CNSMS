@@ -1,4 +1,3 @@
-// src/api/access.api.ts (Modified with updated requestGoogleDriveAccess function)
 import api from "./api";
 import {
   AccessLog,
@@ -102,11 +101,6 @@ const AccessApi = {
     }
   },
 
-  /**
-   * Request access to a Google Drive folder
-   * @param folderId The ID of the folder to request access to
-   * @param emailAddress Optional email address to grant access to (defaults to current user)
-   */
   requestGoogleDriveAccess: async (
     folderId: string,
     emailAddress?: string
@@ -115,37 +109,42 @@ const AccessApi = {
     const getDeviceId = () => {
       let deviceId = localStorage.getItem("device_id");
       if (!deviceId) {
-        // Generate a simple device ID based on browser/device info
         deviceId = `web-${Math.random().toString(36).substring(2, 9)}`;
         localStorage.setItem("device_id", deviceId);
       }
       return deviceId;
     };
 
-    // Create the resource string, including the email if provided
-    let resource = `google-drive:folder:${folderId}`;
-    if (emailAddress) {
-      resource += `:${emailAddress}`;
-    }
+    // Create a standard resource string
+    const resource = `google-drive:folder:${folderId}`;
 
     const accessData = {
       device_id: getDeviceId(),
-      ip_address: "", // Will be determined by backend
+      ip_address: "127.0.0.1", // Provide a default IP
       user_agent: navigator.userAgent,
       resource: resource,
       access_type: AccessType.READ,
+      timestamp: new Date().toISOString(), // Make sure this is at the top level of the object
       context: {
-        timestamp: new Date().toISOString(),
-        email_for_access: emailAddress, // Include email in context
+        email_for_access: emailAddress, // Include email in context properly
       },
     };
+
+    console.log(
+      "Sending access request with data:",
+      JSON.stringify(accessData, null, 2)
+    );
 
     try {
       const response = await api.post<any>("/access/google-drive", accessData);
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error requesting Google Drive access:", error);
-      throw error; // Re-throw to let components handle the error
+      // Log more detailed error information
+      if (error.response) {
+        console.error("Response error data:", error.response.data);
+      }
+      throw error;
     }
   },
 
@@ -393,6 +392,34 @@ const AccessApi = {
         "Failed to approve request";
 
       throw new Error(errorMessage);
+    }
+  },
+
+  /**
+   * Get all active permissions
+   */
+  getActivePermissions: async (): Promise<any[]> => {
+    try {
+      const response = await api.get<any[]>("/access/google-drive/permissions");
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching active permissions:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Revoke a permission
+   */
+  revokePermission: async (permissionId: string): Promise<any> => {
+    try {
+      const response = await api.delete<any>(
+        `/access/google-drive/permissions/${permissionId}`
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error revoking permission:", error);
+      throw error;
     }
   },
 };

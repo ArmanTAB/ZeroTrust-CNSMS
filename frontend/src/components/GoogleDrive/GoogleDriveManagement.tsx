@@ -40,6 +40,17 @@ interface FilterState {
   status: string;
 }
 
+interface ActivePermission {
+  id: string; // Permission ID
+  folder_id: string; // Google Drive folder ID
+  folder_name: string; // Folder name
+  user_email: string; // User email who has access
+  role: string; // Permission role (e.g., "reader", "writer", "owner")
+  granted_at: string; // When the permission was granted
+  granted_by: string; // Who granted the permission
+  expiration?: string; // Optional expiration date
+}
+
 const GoogleDriveManagement: React.FC = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -51,7 +62,9 @@ const GoogleDriveManagement: React.FC = () => {
   const [selectedFolder, setSelectedFolder] = useState<Folder | null>(null);
   const [requestEmail, setRequestEmail] = useState<string>("");
   const [requestingAccess, setRequestingAccess] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<"folders" | "requests">("folders");
+  const [activeTab, setActiveTab] = useState<
+    "folders" | "requests" | "permissions"
+  >("folders");
   const [rejectReason, setRejectReason] = useState<string>("");
   const [processingRequest, setProcessingRequest] = useState<string | null>(
     null
@@ -72,6 +85,16 @@ const GoogleDriveManagement: React.FC = () => {
   const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(true);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
+  const [activePermissions, setActivePermissions] = useState<
+    ActivePermission[]
+  >([]);
+  const [loadingPermissions, setLoadingPermissions] = useState<boolean>(false);
+
+  const [showRevokeConfirmModal, setShowRevokeConfirmModal] =
+    useState<boolean>(false);
+  const [permissionToRevoke, setPermissionToRevoke] = useState<string | null>(
+    null
+  );
   // Refs for tracking intervals
   const folderSyncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const gmailSyncIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -210,6 +233,54 @@ const GoogleDriveManagement: React.FC = () => {
     }
   };
 
+  const fetchActivePermissions = async (silent = false): Promise<void> => {
+    if (!isAdmin) return;
+
+    if (!silent) {
+      setLoadingPermissions(true);
+    }
+    setError(null);
+
+    try {
+      // Call the API to get active permissions
+      const permissions = await AccessApi.getActivePermissions();
+      setActivePermissions(permissions);
+
+      if (silent) {
+        setLastSyncTime(new Date());
+      }
+    } catch (error) {
+      console.error("Error fetching active permissions:", error);
+
+      if (!silent) {
+        if (error instanceof Error) {
+          setError(`Failed to fetch active permissions: ${error.message}`);
+          showToast(
+            `Failed to fetch active permissions: ${error.message}`,
+            "error"
+          );
+        } else {
+          setError("Failed to fetch active permissions");
+          showToast("Failed to fetch active permissions", "error");
+        }
+      }
+    } finally {
+      if (!silent) {
+        setLoadingPermissions(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "folders") {
+      fetchFolders();
+    } else if (activeTab === "requests") {
+      fetchAccessRequests();
+    } else if (activeTab === "permissions") {
+      fetchActivePermissions();
+    }
+  }, [activeTab]);
+
   const resetFilters = (): void => {
     setFilter({ search: "", status: "" });
     // Delay fetching until state is set
@@ -268,7 +339,7 @@ const GoogleDriveManagement: React.FC = () => {
       const resource = `google-drive:folder:${folderId}:${requestEmail}`;
 
       const result = await AccessApi.requestGoogleDriveAccess(
-        folderId,
+        selectedFolder.id,
         requestEmail
       );
 
@@ -391,6 +462,263 @@ const GoogleDriveManagement: React.FC = () => {
       setProcessingRequest(null);
     }
   };
+
+  const handleRevokePermission = async (
+    permissionId: string
+  ): Promise<void> => {
+    setPermissionToRevoke(permissionId);
+    setShowRevokeConfirmModal(true);
+
+    try {
+      // Call API to revoke the permission
+      await AccessApi.revokePermission(permissionId);
+
+      // Remove the permission from the state
+      setActivePermissions((prev) =>
+        prev.filter((permission) => permission.id !== permissionId)
+      );
+
+      showToast("Permission revoked successfully", "success");
+    } catch (error) {
+      console.error("Error revoking permission:", error);
+      showToast("Failed to revoke permission", "error");
+    }
+  };
+
+  const renderActivePermissions = (): JSX.Element => (
+    <>
+      {isAdmin && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button
+            className={`px-4 py-2 rounded-md ${
+              loadingPermissions
+                ? "bg-gray-400 cursor-wait"
+                : "bg-[#1E2761] hover:bg-[#1E2761]/80 text-white"
+            }`}
+            onClick={() => fetchActivePermissions()}
+            disabled={loadingPermissions}
+          >
+            {loadingPermissions ? (
+              <span className="flex items-center">
+                <svg
+                  className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                Loading Permissions...
+              </span>
+            ) : (
+              "Refresh Permissions"
+            )}
+          </button>
+
+          {/* Auto-sync toggle button */}
+          <button
+            className={`px-4 py-2 rounded-md flex items-center ${
+              autoSyncEnabled
+                ? "bg-green-600 hover:bg-green-700 text-white"
+                : "bg-gray-300 hover:bg-gray-400 text-gray-800"
+            }`}
+            onClick={toggleAutoSync}
+          >
+            <svg
+              className={`w-4 h-4 mr-2 ${
+                autoSyncEnabled ? "text-white" : "text-gray-600"
+              }`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            {autoSyncEnabled ? "Auto-Sync: On" : "Auto-Sync: Off"}
+          </button>
+
+          {lastSyncTime && (
+            <div className="px-4 py-2 text-sm text-gray-500 flex items-center">
+              <svg
+                className="w-4 h-4 mr-2 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              Last synced: {lastSyncTime.toLocaleTimeString()}
+            </div>
+          )}
+        </div>
+      )}
+
+      {renderErrorMessage()}
+
+      <div className="bg-white shadow-md rounded-lg overflow-hidden">
+        {activePermissions.length === 0 ? (
+          <div className="text-center py-8">
+            <svg
+              className="mx-auto h-12 w-12 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+              />
+            </svg>
+            <p className="mt-2 text-gray-500">No active permissions found</p>
+            <div className="mt-4">
+              <button
+                onClick={() => fetchActivePermissions()}
+                className="px-4 py-2 text-sm bg-[#1E2761] text-white rounded-md hover:bg-[#1E2761]/80"
+              >
+                Refresh Permissions
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    User
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Folder
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Role
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Granted By
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Granted At
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Expires
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {activePermissions.map((permission) => (
+                  <tr key={permission.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">
+                        {permission.user_email}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {permission.folder_name}
+                      </div>
+                      <div className="text-xs text-gray-500 font-mono truncate max-w-xs">
+                        {permission.folder_id}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          permission.role === "owner"
+                            ? "bg-purple-100 text-purple-800"
+                            : permission.role === "writer"
+                            ? "bg-blue-100 text-blue-800"
+                            : "bg-green-100 text-green-800"
+                        }`}
+                      >
+                        {permission.role}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {permission.granted_by}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {new Date(permission.granted_at).toLocaleString()}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {permission.expiration ? (
+                        <div className="text-sm text-gray-900">
+                          {new Date(permission.expiration).toLocaleString()}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-500">
+                          No expiration
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button
+                        onClick={() => handleRevokePermission(permission.id)}
+                        className="text-[#7A2048] hover:text-[#7A2048]/80 px-2 py-1 rounded hover:bg-[#7A2048]/10"
+                      >
+                        Revoke
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
+  );
 
   const handleSyncGoogleDriveFolders = async (
     silent = false
@@ -1161,6 +1489,16 @@ const GoogleDriveManagement: React.FC = () => {
                   </span>
                 )}
               </button>
+              <button
+                className={`py-4 px-6 font-medium text-sm border-b-2 ${
+                  activeTab === "permissions"
+                    ? "border-[#408EC6] text-[#408EC6]"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
+                onClick={() => setActiveTab("permissions")}
+              >
+                Active Permissions
+              </button>
             </nav>
           </div>
         </div>
@@ -1172,8 +1510,10 @@ const GoogleDriveManagement: React.FC = () => {
         </div>
       ) : activeTab === "folders" ? (
         renderFolders()
-      ) : (
+      ) : activeTab === "requests" ? (
         renderAccessRequests()
+      ) : (
+        renderActivePermissions()
       )}
 
       {/* Reject Modal */}
@@ -1403,6 +1743,96 @@ const GoogleDriveManagement: React.FC = () => {
                   type="button"
                   className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#408EC6] sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                   onClick={() => setShowRequestModal(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {showRevokeConfirmModal && (
+        <div
+          className="fixed z-10 inset-0 overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div
+              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+              aria-hidden="true"
+            ></div>
+            <span
+              className="hidden sm:inline-block sm:align-middle sm:h-screen"
+              aria-hidden="true"
+            >
+              &#8203;
+            </span>
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                    <svg
+                      className="h-6 w-6 text-red-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </div>
+                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                    <h3
+                      className="text-lg leading-6 font-medium text-gray-900"
+                      id="modal-title"
+                    >
+                      Revoke Permission
+                    </h3>
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-500">
+                        Are you sure you want to revoke this permission? This
+                        action cannot be undone.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button
+                  type="button"
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-[#7A2048] text-base font-medium text-white hover:bg-[#7A2048]/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#7A2048] sm:ml-3 sm:w-auto sm:text-sm"
+                  onClick={async () => {
+                    if (permissionToRevoke) {
+                      try {
+                        await AccessApi.revokePermission(permissionToRevoke);
+                        setActivePermissions((prev) =>
+                          prev.filter((p) => p.id !== permissionToRevoke)
+                        );
+                        showToast("Permission revoked successfully", "success");
+                      } catch (error) {
+                        console.error("Error revoking permission:", error);
+                        showToast("Failed to revoke permission", "error");
+                      } finally {
+                        setShowRevokeConfirmModal(false);
+                        setPermissionToRevoke(null);
+                      }
+                    }
+                  }}
+                >
+                  Revoke
+                </button>
+                <button
+                  type="button"
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#408EC6] sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  onClick={() => {
+                    setShowRevokeConfirmModal(false);
+                    setPermissionToRevoke(null);
+                  }}
                 >
                   Cancel
                 </button>

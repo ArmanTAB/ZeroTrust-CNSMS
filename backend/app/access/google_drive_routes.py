@@ -1038,3 +1038,107 @@ async def direct_approve_access(
     
     # Return the result directly
     return result
+@router.get("/permissions", response_model=List[dict])
+async def list_active_permissions(
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """List all active Google Drive permissions"""
+    # Check if user has admin privileges
+    if current_user.role not in ["admin", "security_analyst"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to view permissions"
+        )
+    
+    try:
+        # Get Google Drive service
+        drive_service = GoogleDriveService.get_instance()
+        
+        # Get all folders
+        folders = await db.db.folder_mappings.find({}).to_list(length=1000)
+        
+        permissions = []
+        
+        # For each folder, get permissions
+        for folder in folders:
+            folder_id = folder["folder_id"]
+            folder_name = folder["name"]
+            
+            # Skip placeholder folders
+            if folder_id.startswith("placeholder_"):
+                continue
+                
+            try:
+                # Get permissions for this folder
+                folder_perms = drive_service.get_folder_permissions(folder_id)
+                
+                # Process permissions
+                for perm in folder_perms:
+                    if "emailAddress" in perm and perm.get("role") != "owner":
+                        # Get the permission request if it exists
+                        request = await db.db.drive_access_requests.find_one({
+                            "folder_id": folder_id,
+                            "user_email": perm["emailAddress"],
+                            "status": "approved"
+                        })
+                        
+                        permissions.append({
+                            "id": perm["id"],
+                            "folder_id": folder_id,
+                            "folder_name": folder_name,
+                            "user_email": perm["emailAddress"],
+                            "role": perm["role"],
+                            "granted_at": request["decision_time"] if request else datetime.utcnow(),
+                            "granted_by": request["decision_by_email"] if request else "Unknown",
+                            "expiration": None  # Add expiration if you implement it
+                        })
+            except Exception as e:
+                logger.error(f"Error getting permissions for folder {folder_id}: {str(e)}")
+        
+        return permissions
+    except Exception as e:
+        logger.error(f"Error listing active permissions: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error listing active permissions: {str(e)}"
+        )
+
+@router.delete("/permissions/{permission_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_permission(
+    permission_id: str,
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """Revoke a Google Drive permission"""
+    # Check if user has admin privileges
+    if current_user.role not in ["admin", "security_analyst"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to revoke permissions"
+        )
+    
+    try:
+        # Get Google Drive service
+        drive_service = GoogleDriveService.get_instance()
+        
+        # Extract folder ID from permission ID (you may need to adjust this based on your implementation)
+        parts = permission_id.split(':')
+        if len(parts) != 2:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid permission ID format"
+            )
+            
+        folder_id = parts[0]
+        permission_id = parts[1]
+        
+        # Revoke the permission
+        drive_service.revoke_access(folder_id, permission_id)
+        
+        # No content to return on success
+        return
+    except Exception as e:
+        logger.error(f"Error revoking permission: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error revoking permission: {str(e)}"
+        )

@@ -491,3 +491,40 @@ class GoogleDriveService:
         except Exception as e:
             logger.error(f"Error finding folder by name: {str(e)}")
             return None
+        
+    def get_folder_permissions(self, folder_id):
+        """Get all permissions for a folder"""
+        if not self.service:
+            logger.error("Not authenticated with Google Drive")
+            raise Exception("Not authenticated with Google Drive")
+            
+        try:
+            permissions = self.service.permissions().list(
+                fileId=folder_id,
+                fields="permissions(id,emailAddress,role,type)",
+                supportsAllDrives=True
+            ).execute()
+            
+            return permissions.get('permissions', [])
+        except Exception as e:
+            logger.error(f"Error getting folder permissions: {str(e)}")
+            return []
+
+    def revoke_access(self, folder_id, permission_id):
+        """Revoke access to a folder for a specific permission"""
+        if not self.service:
+            logger.error("Not authenticated with Google Drive")
+            raise Exception("Not authenticated with Google Drive")
+            
+        try:
+            self.service.permissions().delete(
+                fileId=folder_id,
+                permissionId=permission_id,
+                supportsAllDrives=True
+            ).execute()
+            
+            logger.info(f"Revoked permission {permission_id} for folder {folder_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error revoking access: {str(e)}")
+            raise Exception(f"Failed to revoke access: {str(e)}")
