@@ -58,6 +58,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   // Check active route
   const isActiveRoute = (route: string) => {
+    if (route === "/agent") {
+      return location.pathname === route;
+    }
     return (
       location.pathname === route || location.pathname.startsWith(route + "/")
     );

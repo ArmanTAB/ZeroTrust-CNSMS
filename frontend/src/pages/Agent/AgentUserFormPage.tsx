@@ -4,6 +4,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import AgentApi from "../../api/agent.api";
 import { AgentUser, AgentUserRole } from "../../types/agent";
 import { useToast } from "../../store/ToastContext";
+import MainLayout from "../../components/Layout/MainLayout";
 
 const AgentUserFormPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -124,242 +125,246 @@ const AgentUserFormPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-6 flex justify-center">
-        <div className="relative">
-          <div className="w-12 h-12 rounded-full border-4 border-[#1E2761] border-opacity-25"></div>
-          <div className="w-12 h-12 rounded-full border-t-4 border-[#408EC6] animate-spin absolute top-0"></div>
+      <MainLayout>
+        <div className="flex justify-center items-center h-64">
+          <div className="relative">
+            <div className="w-12 h-12 rounded-full border-4 border-[#1E2761] border-opacity-25"></div>
+            <div className="w-12 h-12 rounded-full border-t-4 border-[#408EC6] animate-spin absolute top-0"></div>
+          </div>
         </div>
-      </div>
+      </MainLayout>
     );
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center mb-6">
-        <Link
-          to="/agent/users"
-          className="mr-4 text-[#408EC6] hover:text-[#1E2761]"
-        >
-          &larr; Back to Users
-        </Link>
-        <h1 className="text-2xl font-bold text-gray-800">
-          {isEditMode ? "Edit Agent User" : "Add Agent User"}
-        </h1>
-      </div>
-
-      {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative">
-          {error}
+    <MainLayout>
+      <div className="p-6">
+        <div className="flex items-center mb-6">
+          <Link
+            to="/agent/users"
+            className="mr-4 text-[#408EC6] hover:text-[#1E2761]"
+          >
+            &larr; Back to Users
+          </Link>
+          <h1 className="text-2xl font-bold text-gray-800">
+            {isEditMode ? "Edit Agent User" : "Add Agent User"}
+          </h1>
         </div>
-      )}
 
-      <div className="bg-white rounded-lg shadow p-6">
-        <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label
-                htmlFor="firstName"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                First Name*
-              </label>
-              <input
-                type="text"
-                id="firstName"
-                name="firstName"
-                value={formData.firstName || ""}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#408EC6] focus:border-[#408EC6]"
-                required
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="lastName"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Last Name*
-              </label>
-              <input
-                type="text"
-                id="lastName"
-                name="lastName"
-                value={formData.lastName || ""}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#408EC6] focus:border-[#408EC6]"
-                required
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Email Address*
-              </label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email || ""}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#408EC6] focus:border-[#408EC6]"
-                required
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                {isEditMode
-                  ? "Password (leave blank to keep current)"
-                  : "Password*"}
-              </label>
-              <input
-                type="password"
-                id="password"
-                name="password"
-                value={formData.password || ""}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#408EC6] focus:border-[#408EC6]"
-                required={!isEditMode}
-                minLength={6}
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                {isEditMode
-                  ? "Leave blank to keep the current password"
-                  : "Password must be at least 6 characters long"}
-              </p>
-            </div>
-
-            <div>
-              <label
-                htmlFor="role"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Role*
-              </label>
-              <select
-                id="role"
-                name="role"
-                value={formData.role || AgentUserRole.USER}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#408EC6] focus:border-[#408EC6]"
-                required
-              >
-                <option value={AgentUserRole.ADMIN}>Admin</option>
-                <option value={AgentUserRole.MANAGER}>Manager</option>
-                <option value={AgentUserRole.USER}>User</option>
-              </select>
-            </div>
-
-            <div>
-              <label
-                htmlFor="department"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Department
-              </label>
-              <input
-                type="text"
-                id="department"
-                name="department"
-                value={formData.department || ""}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#408EC6] focus:border-[#408EC6]"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="position"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Position
-              </label>
-              <input
-                type="text"
-                id="position"
-                name="position"
-                value={formData.position || ""}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#408EC6] focus:border-[#408EC6]"
-              />
-            </div>
-
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="isActive"
-                name="isActive"
-                checked={formData.isActive || false}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    isActive: e.target.checked,
-                  })
-                }
-                className="h-4 w-4 text-[#408EC6] focus:ring-[#408EC6] border-gray-300 rounded"
-              />
-              <label
-                htmlFor="isActive"
-                className="ml-2 block text-sm text-gray-700"
-              >
-                User is active
-              </label>
-            </div>
+        {error && (
+          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative">
+            {error}
           </div>
+        )}
 
-          <div className="mt-6 flex justify-end space-x-4">
-            <Link
-              to="/agent/users"
-              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
-            >
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-4 py-2 bg-[#1E2761] text-white rounded-md hover:bg-[#408EC6] disabled:bg-gray-400 disabled:cursor-not-allowed"
-            >
-              {saving ? (
-                <span className="flex items-center">
-                  <svg
-                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Saving...
-                </span>
-              ) : isEditMode ? (
-                "Update User"
-              ) : (
-                "Create User"
-              )}
-            </button>
-          </div>
-        </form>
+        <div className="bg-white rounded-lg shadow p-6">
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label
+                  htmlFor="firstName"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  First Name*
+                </label>
+                <input
+                  type="text"
+                  id="firstName"
+                  name="firstName"
+                  value={formData.firstName || ""}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#408EC6] focus:border-[#408EC6]"
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="lastName"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Last Name*
+                </label>
+                <input
+                  type="text"
+                  id="lastName"
+                  name="lastName"
+                  value={formData.lastName || ""}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#408EC6] focus:border-[#408EC6]"
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="email"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Email Address*
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  value={formData.email || ""}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#408EC6] focus:border-[#408EC6]"
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="password"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  {isEditMode
+                    ? "Password (leave blank to keep current)"
+                    : "Password*"}
+                </label>
+                <input
+                  type="password"
+                  id="password"
+                  name="password"
+                  value={formData.password || ""}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#408EC6] focus:border-[#408EC6]"
+                  required={!isEditMode}
+                  minLength={6}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  {isEditMode
+                    ? "Leave blank to keep the current password"
+                    : "Password must be at least 6 characters long"}
+                </p>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="role"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Role*
+                </label>
+                <select
+                  id="role"
+                  name="role"
+                  value={formData.role || AgentUserRole.USER}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#408EC6] focus:border-[#408EC6]"
+                  required
+                >
+                  <option value={AgentUserRole.ADMIN}>Admin</option>
+                  <option value={AgentUserRole.MANAGER}>Manager</option>
+                  <option value={AgentUserRole.USER}>User</option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="department"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Department
+                </label>
+                <input
+                  type="text"
+                  id="department"
+                  name="department"
+                  value={formData.department || ""}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#408EC6] focus:border-[#408EC6]"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="position"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Position
+                </label>
+                <input
+                  type="text"
+                  id="position"
+                  name="position"
+                  value={formData.position || ""}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#408EC6] focus:border-[#408EC6]"
+                />
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="isActive"
+                  name="isActive"
+                  checked={formData.isActive || false}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      isActive: e.target.checked,
+                    })
+                  }
+                  className="h-4 w-4 text-[#408EC6] focus:ring-[#408EC6] border-gray-300 rounded"
+                />
+                <label
+                  htmlFor="isActive"
+                  className="ml-2 block text-sm text-gray-700"
+                >
+                  User is active
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end space-x-4">
+              <Link
+                to="/agent/users"
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+              >
+                Cancel
+              </Link>
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-4 py-2 bg-[#1E2761] text-white rounded-md hover:bg-[#408EC6] disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                {saving ? (
+                  <span className="flex items-center">
+                    <svg
+                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
+                    Saving...
+                  </span>
+                ) : isEditMode ? (
+                  "Update User"
+                ) : (
+                  "Create User"
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
-    </div>
+    </MainLayout>
   );
 };
 

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import AgentApi from "../../api/agent.api";
 import { AgentUser, AgentUserRole } from "../../types/agent";
+import MainLayout from "../../components/Layout/MainLayout";
 
 const AgentUsersPage: React.FC = () => {
   const [users, setUsers] = useState<AgentUser[]>([]);
@@ -92,6 +93,7 @@ const AgentUsersPage: React.FC = () => {
   };
 
   return (
+    <MainLayout>
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
@@ -342,6 +344,7 @@ const AgentUsersPage: React.FC = () => {
         </div>
       )}
     </div>
+    </MainLayout>
   );
 };
 
