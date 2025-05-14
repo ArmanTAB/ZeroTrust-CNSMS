@@ -1,4 +1,5 @@
-// src/routes.tsx
+// Update routes.tsx to include agent management routes
+
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "./pages/Auth/LoginPage";
@@ -15,17 +16,24 @@ import NotFoundPage from "./pages/NotFoundPage";
 import ProfilePage from "./pages/Profile/ProfilePage";
 import GoogleDrivePage from "./pages/GoogleDrive/GoogleDrivePage";
 
+// Import Agent pages
+import AgentDashboardPage from "./pages/Agent/AgentDashboardPage";
+import AgentUsersPage from "./pages/Agent/AgentUsersPage";
+import AgentUserFormPage from "./pages/Agent/AgentUserFormPage";
+import AgentRulesPage from "./pages/Agent/AgentRulesPage";
+import AgentRuleForm from "./pages/Agent/AgentRuleForm";
+
 const AppRoutes: React.FC = () => {
   return (
     <Routes>
-      {/* Публичные маршруты */}
+      {/* Public routes */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-      {/* Защищенные маршруты */}
+      {/* Protected routes */}
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/devices" element={<DevicesPage />} />
@@ -33,12 +41,21 @@ const AppRoutes: React.FC = () => {
         <Route path="/access-logs" element={<AccessLogsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/google-drive" element={<GoogleDrivePage />} />
+
+        {/* Agent Management Routes */}
+        <Route path="/agent" element={<AgentDashboardPage />} />
+        <Route path="/agent/users" element={<AgentUsersPage />} />
+        <Route path="/agent/users/new" element={<AgentUserFormPage />} />
+        <Route path="/agent/users/:id" element={<AgentUserFormPage />} />
+        <Route path="/agent/rules" element={<AgentRulesPage />} />
+        <Route path="/agent/rules/new" element={<AgentRuleForm />} />
+        <Route path="/agent/rules/:id/:action" element={<AgentRuleForm />} />
       </Route>
 
-      {/* Перенаправление с главной страницы */}
+      {/* Redirect from main page */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-      {/* Страница 404 для неизвестных маршрутов */}
+      {/* 404 page for unknown routes */}
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );

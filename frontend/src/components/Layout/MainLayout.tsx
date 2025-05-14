@@ -177,7 +177,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               </svg>
             </button>
           </div>
+          {/* This is the navigation part of your MainLayout.tsx */}
           <nav className="flex-1 px-2 py-4 space-y-1">
+            {/* Main Navigation Links */}
             <Link
               to="/dashboard"
               className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 group ${
@@ -213,6 +215,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 Dashboard
               </span>
             </Link>
+
             <Link
               to="/devices"
               className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 group ${
@@ -248,6 +251,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 Devices
               </span>
             </Link>
+
             <Link
               to="/access-logs"
               className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 group ${
@@ -283,41 +287,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 Access Logs
               </span>
             </Link>
-            <Link
-              to="/profile"
-              className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 group ${
-                isActiveRoute("/profile")
-                  ? "bg-[#408EC6] text-white"
-                  : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
-              } ${isSidebarCollapsed && !isHovering ? "justify-center" : ""}`}
-            >
-              <svg
-                className={`flex-shrink-0 w-6 h-6 transition-colors duration-200 ${
-                  isActiveRoute("/profile")
-                    ? "text-white"
-                    : "text-gray-300 group-hover:text-white"
-                }`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                />
-              </svg>
-              <span
-                className={`text-sm font-medium transition-opacity duration-200 ml-3 ${
-                  isSidebarCollapsed && !isHovering
-                    ? "opacity-0 w-0 overflow-hidden"
-                    : "opacity-100"
-                }`}
-              >
-                Profile
-              </span>
-            </Link>
+
             <Link
               to="/google-drive"
               className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 group ${
@@ -351,6 +321,166 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 }`}
               >
                 Google Drive
+              </span>
+            </Link>
+
+            {/* Agent Management Section - New Addition */}
+            <div
+              className={`pt-4 mt-4 border-t border-gray-700 ${
+                isSidebarCollapsed && !isHovering ? "mx-2" : "mx-3"
+              }`}
+            >
+              <p
+                className={`px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider ${
+                  isSidebarCollapsed && !isHovering ? "hidden" : "block"
+                }`}
+              >
+                Agent Management
+              </p>
+            </div>
+
+            <Link
+              to="/agent"
+              className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 group ${
+                isActiveRoute("/agent") && !isActiveRoute("/agent/")
+                  ? "bg-[#408EC6] text-white"
+                  : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
+              } ${isSidebarCollapsed && !isHovering ? "justify-center" : ""}`}
+            >
+              <svg
+                className={`flex-shrink-0 w-6 h-6 transition-colors duration-200 ${
+                  isActiveRoute("/agent") && !isActiveRoute("/agent/")
+                    ? "text-white"
+                    : "text-gray-300 group-hover:text-white"
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                />
+              </svg>
+              <span
+                className={`text-sm font-medium transition-opacity duration-200 ml-3 ${
+                  isSidebarCollapsed && !isHovering
+                    ? "opacity-0 w-0 overflow-hidden"
+                    : "opacity-100"
+                }`}
+              >
+                Agent Dashboard
+              </span>
+            </Link>
+
+            <Link
+              to="/agent/users"
+              className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 group ${
+                isActiveRoute("/agent/users")
+                  ? "bg-[#408EC6] text-white"
+                  : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
+              } ${isSidebarCollapsed && !isHovering ? "justify-center" : ""}`}
+            >
+              <svg
+                className={`flex-shrink-0 w-6 h-6 transition-colors duration-200 ${
+                  isActiveRoute("/agent/users")
+                    ? "text-white"
+                    : "text-gray-300 group-hover:text-white"
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                />
+              </svg>
+              <span
+                className={`text-sm font-medium transition-opacity duration-200 ml-3 ${
+                  isSidebarCollapsed && !isHovering
+                    ? "opacity-0 w-0 overflow-hidden"
+                    : "opacity-100"
+                }`}
+              >
+                Agent Users
+              </span>
+            </Link>
+
+            <Link
+              to="/agent/rules"
+              className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 group ${
+                isActiveRoute("/agent/rules")
+                  ? "bg-[#408EC6] text-white"
+                  : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
+              } ${isSidebarCollapsed && !isHovering ? "justify-center" : ""}`}
+            >
+              <svg
+                className={`flex-shrink-0 w-6 h-6 transition-colors duration-200 ${
+                  isActiveRoute("/agent/rules")
+                    ? "text-white"
+                    : "text-gray-300 group-hover:text-white"
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                />
+              </svg>
+              <span
+                className={`text-sm font-medium transition-opacity duration-200 ml-3 ${
+                  isSidebarCollapsed && !isHovering
+                    ? "opacity-0 w-0 overflow-hidden"
+                    : "opacity-100"
+                }`}
+              >
+                Agent Rules
+              </span>
+            </Link>
+
+            {/* Profile link */}
+            <Link
+              to="/profile"
+              className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 group ${
+                isActiveRoute("/profile")
+                  ? "bg-[#408EC6] text-white"
+                  : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
+              } ${isSidebarCollapsed && !isHovering ? "justify-center" : ""}`}
+            >
+              <svg
+                className={`flex-shrink-0 w-6 h-6 transition-colors duration-200 ${
+                  isActiveRoute("/profile")
+                    ? "text-white"
+                    : "text-gray-300 group-hover:text-white"
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                />
+              </svg>
+              <span
+                className={`text-sm font-medium transition-opacity duration-200 ml-3 ${
+                  isSidebarCollapsed && !isHovering
+                    ? "opacity-0 w-0 overflow-hidden"
+                    : "opacity-100"
+                }`}
+              >
+                Profile
               </span>
             </Link>
           </nav>
@@ -569,6 +699,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                   </div>
                 </div>
                 <nav className="space-y-1">
+                  {/* Main navigation links */}
                   <Link
                     to="/dashboard"
                     className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 ${
@@ -642,6 +773,113 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                     <span>Access Logs</span>
                   </Link>
                   <Link
+                    to="/google-drive"
+                    className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 ${
+                      isActiveRoute("/google-drive")
+                        ? "bg-[#408EC6] text-white"
+                        : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
+                    }`}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <svg
+                      className="w-6 h-6 mr-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+                      />
+                    </svg>
+                    <span>Google Drive</span>
+                  </Link>
+
+                  {/* Agent Management Section */}
+                  <div className="pt-4 mt-4 border-t border-gray-700">
+                    <p className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                      Agent Management
+                    </p>
+                  </div>
+
+                  <Link
+                    to="/agent"
+                    className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 ${
+                      isActiveRoute("/agent") && !isActiveRoute("/agent/")
+                        ? "bg-[#408EC6] text-white"
+                        : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
+                    }`}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <svg
+                      className="w-6 h-6 mr-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                      />
+                    </svg>
+                    <span>Agent Dashboard</span>
+                  </Link>
+
+                  <Link
+                    to="/agent/users"
+                    className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 ${
+                      isActiveRoute("/agent/users")
+                        ? "bg-[#408EC6] text-white"
+                        : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
+                    }`}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <svg
+                      className="w-6 h-6 mr-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                      />
+                    </svg>
+                    <span>Agent Users</span>
+                  </Link>
+
+                  <Link
+                    to="/agent/rules"
+                    className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 ${
+                      isActiveRoute("/agent/rules")
+                        ? "bg-[#408EC6] text-white"
+                        : "text-gray-100 hover:bg-[#2a3980] hover:text-white"
+                    }`}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <svg
+                      className="w-6 h-6 mr-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                      />
+                    </svg>
+                    <span>Agent Rules</span>
+                  </Link>
+
+                  <Link
                     to="/profile"
                     className={`flex items-center px-3 py-3 rounded-md transition-all duration-200 ${
                       isActiveRoute("/profile")
@@ -666,6 +904,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                     <span>Profile</span>
                   </Link>
                 </nav>
+
                 <div className="mt-10 px-3">
                   <button
                     type="button"
