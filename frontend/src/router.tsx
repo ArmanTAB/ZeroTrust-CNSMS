@@ -9,7 +9,7 @@ import ResetPasswordPage from "./pages/Auth/ResetPasswordPage";
 import DashboardPage from "./pages/Dashboard/DashboardPage";
 import DevicesPage from "./pages/Devices/DevicesPage";
 import DeviceDetailsPage from "./pages/Devices/DeviceDetailsPage";
-import AccessLogsPage from "./pages/Access/AccessLogsPage";
+import AccessLogsPage from "./pages/AccessLogs/AccessLogsPage";
 import GoogleDrivePage from "./pages/GoogleDrive/GoogleDrivePage";
 import SettingsPage from "./pages/Settings/SettingsPage";
 import SecurityPage from "./pages/Security/SecurityPage";
@@ -20,12 +20,12 @@ import NotFoundPage from "./pages/NotFoundPage";
 import AgentUsersPage from "./pages/Agent/AgentUsersPage";
 import AgentUserFormPage from "./pages/Agent/AgentUserFormPage";
 import AgentRulesPage from "./pages/Agent/AgentRulesPage";
-import AgentRuleFormPage from "./pages/Agent/AgentRuleFormPage";
+import AgentRuleFormPage from "./pages/Agent/AgentRuleForm";
 import AgentDashboardPage from "./pages/Agent/AgentDashboardPage";
 
 // Auth wrapper components
 import AuthLayout from "./components/Layout/AuthLayout";
-import ProtectedRoute from "./components/Auth/ProtectedRoute";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 export const router = createBrowserRouter([
   // Auth routes

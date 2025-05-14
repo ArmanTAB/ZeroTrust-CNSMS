@@ -1,4 +1,4 @@
-// frontend/src/api/agent.api.ts
+// src/api/agent.api.ts
 import api from "./api";
 import { AgentUser, AgentRule, AgentActivity } from "../types/agent";
 

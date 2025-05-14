@@ -1,23 +1,21 @@
 // src/pages/Agent/AgentRuleForm.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, ChangeEvent } from "react";
 import MainLayout from "../../components/Layout/MainLayout";
 import {
   Box,
   Button,
-  Card,
-  CardContent,
   Checkbox,
   Chip,
   CircularProgress,
   FormControl,
   FormControlLabel,
-  Grid,
   InputLabel,
   ListItemText,
   MenuItem,
   OutlinedInput,
   Paper,
   Select,
+  SelectChangeEvent,
   Switch,
   TextField,
   Typography,
@@ -34,7 +32,7 @@ import {
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SaveIcon from "@mui/icons-material/Save";
 
-// Initialize a new empty rule
+// Define a properly typed empty rule
 const emptyRule: Partial<AgentRule> = {
   name: "",
   description: "",
@@ -66,7 +64,7 @@ interface AgentRuleFormProps {
 }
 
 const AgentRuleForm: React.FC<AgentRuleFormProps> = ({ viewOnly = false }) => {
-  const { id, action } = useParams<{ id: string; action: "view" | "edit" }>();
+  const { id, action } = useParams<{ id: string; action: string }>();
   const isNew = !id;
   const isView = viewOnly || action === "view";
   const [formData, setFormData] = useState<Partial<AgentRule>>(emptyRule);
@@ -113,7 +111,7 @@ const AgentRuleForm: React.FC<AgentRuleFormProps> = ({ viewOnly = false }) => {
 
         // If editing or viewing, fetch rule data
         if (!isNew) {
-          const ruleData = await AgentApi.getRuleById(id);
+          const ruleData = await AgentApi.getRuleById(id || "");
           if (ruleData) {
             setFormData(ruleData);
           } else {
@@ -132,67 +130,153 @@ const AgentRuleForm: React.FC<AgentRuleFormProps> = ({ viewOnly = false }) => {
     fetchData();
   }, [id, isNew, navigate, showToast]);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }>
+  // Handle text field changes
+  const handleTextChange = (
+    e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    const { name, value, checked } = e.target as HTMLInputElement;
+    const { name, value } = e.target;
 
-    if (!name) return;
+    // Handle priority as a number
+    if (name === "priority") {
+      setFormData((prev) => ({
+        ...prev,
+        priority: Number(value),
+      }));
+      return;
+    }
+
+    // Handle simple string fields
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  // Handle switch changes (checkboxes)
+  const handleSwitchChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const { name, checked } = e.target;
 
     if (name === "isActive") {
       setFormData((prev) => ({ ...prev, isActive: checked }));
-    } else if (name === "type") {
-      setFormData((prev) => ({ ...prev, type: value as AgentRuleType }));
-    } else if (name === "timeRestrictionsEnabled") {
-      setFormData((prev) => ({
-        ...prev,
-        conditions: {
-          ...prev.conditions,
-          timeRestrictions: {
-            ...prev.conditions?.timeRestrictions,
+      return;
+    }
+
+    if (name === "timeRestrictionsEnabled") {
+      setFormData((prev) => {
+        const updatedData = { ...prev };
+        if (!updatedData.conditions) {
+          updatedData.conditions = {
+            timeRestrictions: {
+              enabled: checked,
+              startTime: "09:00",
+              endTime: "17:00",
+              days: [1, 2, 3, 4, 5],
+            },
+          };
+        } else if (!updatedData.conditions.timeRestrictions) {
+          updatedData.conditions.timeRestrictions = {
             enabled: checked,
-          },
-        },
-      }));
-    } else if (name === "startTime" || name === "endTime") {
-      setFormData((prev) => ({
-        ...prev,
-        conditions: {
-          ...prev.conditions,
-          timeRestrictions: {
-            ...prev.conditions?.timeRestrictions,
-            [name]: value,
-          },
-        },
-      }));
-    } else if (name === "days") {
-      setFormData((prev) => ({
-        ...prev,
-        conditions: {
-          ...prev.conditions,
-          timeRestrictions: {
-            ...prev.conditions?.timeRestrictions,
-            days: value as number[],
-          },
-        },
-      }));
-    } else if (name.includes(".")) {
-      // Handle nested properties like "appliesTo.users"
-      const [parent, child] = name.split(".");
-      setFormData((prev) => ({
-        ...prev,
-        [parent]: {
-          ...prev[parent as keyof AgentRule],
-          [child]: value,
-        },
-      }));
-    } else {
-      setFormData((prev) => ({ ...prev, [name]: value }));
+            startTime: "09:00",
+            endTime: "17:00",
+            days: [1, 2, 3, 4, 5],
+          };
+        } else {
+          updatedData.conditions.timeRestrictions.enabled = checked;
+        }
+        return updatedData;
+      });
     }
   };
 
+  // Handle select changes
+  const handleSelectChange = (e: SelectChangeEvent<unknown>) => {
+    const { name, value } = e.target;
+
+    // Handle rule type
+    if (name === "type") {
+      setFormData((prev) => ({
+        ...prev,
+        type: value as AgentRuleType,
+      }));
+      return;
+    }
+
+    // Handle days selection
+    if (name === "days") {
+      setFormData((prev) => {
+        const updatedData = { ...prev };
+        if (!updatedData.conditions) {
+          updatedData.conditions = {
+            timeRestrictions: {
+              enabled: false,
+              startTime: "09:00",
+              endTime: "17:00",
+              days: value as number[],
+            },
+          };
+        } else if (!updatedData.conditions.timeRestrictions) {
+          updatedData.conditions.timeRestrictions = {
+            enabled: false,
+            startTime: "09:00",
+            endTime: "17:00",
+            days: value as number[],
+          };
+        } else {
+          updatedData.conditions.timeRestrictions.days = value as number[];
+        }
+        return updatedData;
+      });
+      return;
+    }
+
+    // Handle time fields
+    if (name === "startTime" || name === "endTime") {
+      setFormData((prev) => {
+        const updatedData = { ...prev };
+        if (!updatedData.conditions) {
+          updatedData.conditions = {
+            timeRestrictions: {
+              enabled: false,
+              startTime: name === "startTime" ? (value as string) : "09:00",
+              endTime: name === "endTime" ? (value as string) : "17:00",
+              days: [1, 2, 3, 4, 5],
+            },
+          };
+        } else if (!updatedData.conditions.timeRestrictions) {
+          updatedData.conditions.timeRestrictions = {
+            enabled: false,
+            startTime: name === "startTime" ? (value as string) : "09:00",
+            endTime: name === "endTime" ? (value as string) : "17:00",
+            days: [1, 2, 3, 4, 5],
+          };
+        } else {
+          // Type assertion for string value
+          updatedData.conditions.timeRestrictions[
+            name === "startTime" ? "startTime" : "endTime"
+          ] = value as string;
+        }
+        return updatedData;
+      });
+      return;
+    }
+
+    // Handle nested properties for applies to
+    if (name.startsWith("appliesTo.")) {
+      const field = name.split(".")[1] as "users" | "departments" | "roles";
+      setFormData((prev) => {
+        const updatedData = { ...prev };
+        if (!updatedData.appliesTo) {
+          updatedData.appliesTo = { users: [], departments: [], roles: [] };
+        }
+        updatedData.appliesTo[field] = value as string[];
+        return updatedData;
+      });
+    }
+  };
+
+  // Handle adding new resource items
   const handleNewItemChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+    e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
     type: "website" | "application" | "file"
   ) => {
     setNewItem((prev) => ({ ...prev, [type]: e.target.value }));
@@ -209,14 +293,23 @@ const AgentRuleForm: React.FC<AgentRuleFormProps> = ({ viewOnly = false }) => {
 
     if (!itemValue) return;
 
-    setFormData((prev) => ({
-      ...prev,
-      resources: {
-        ...prev.resources,
-        [type]: [...(prev.resources?.[type] || []), itemValue],
-      },
-    }));
+    setFormData((prev) => {
+      // Create a new copy of the formData
+      const updatedData = { ...prev };
 
+      // Make sure resources exists
+      if (!updatedData.resources) {
+        updatedData.resources = { websites: [], applications: [], files: [] };
+      }
+
+      // Add the new item to the appropriate array
+      const currentArray = updatedData.resources[type] || [];
+      updatedData.resources[type] = [...currentArray, itemValue];
+
+      return updatedData;
+    });
+
+    // Clear the input field
     setNewItem((prev) => ({ ...prev, [itemKey]: "" }));
   };
 
@@ -224,13 +317,21 @@ const AgentRuleForm: React.FC<AgentRuleFormProps> = ({ viewOnly = false }) => {
     type: "websites" | "applications" | "files",
     index: number
   ) => {
-    setFormData((prev) => ({
-      ...prev,
-      resources: {
-        ...prev.resources,
-        [type]: prev.resources?.[type]?.filter((_, i) => i !== index) || [],
-      },
-    }));
+    setFormData((prev) => {
+      // Create a new copy of the formData
+      const updatedData = { ...prev };
+
+      // Make sure resources exists
+      if (!updatedData.resources) {
+        return updatedData;
+      }
+
+      // Filter out the item to remove
+      const currentArray = updatedData.resources[type] || [];
+      updatedData.resources[type] = currentArray.filter((_, i) => i !== index);
+
+      return updatedData;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -246,7 +347,7 @@ const AgentRuleForm: React.FC<AgentRuleFormProps> = ({ viewOnly = false }) => {
           showToast("Rule created successfully", "success");
         }
       } else {
-        result = await AgentApi.updateRule(id, formData);
+        result = await AgentApi.updateRule(id || "", formData);
         if (result) {
           showToast("Rule updated successfully", "success");
         }
@@ -264,7 +365,12 @@ const AgentRuleForm: React.FC<AgentRuleFormProps> = ({ viewOnly = false }) => {
   if (loading) {
     return (
       <MainLayout>
-        <Box className="flex justify-center items-center h-64">
+        <Box
+          display="flex"
+          justifyContent="center"
+          alignItems="center"
+          height="64vh"
+        >
           <CircularProgress />
         </Box>
       </MainLayout>
@@ -273,368 +379,362 @@ const AgentRuleForm: React.FC<AgentRuleFormProps> = ({ viewOnly = false }) => {
 
   return (
     <MainLayout>
-      <Box className="flex items-center mb-6">
+      <Box display="flex" alignItems="center" mb={6}>
         <Button
           component={Link}
           to="/agent/rules"
           startIcon={<ArrowBackIcon />}
-          className="mr-4"
+          sx={{ mr: 4 }}
         >
           Back to Rules
         </Button>
-        <Typography variant="h4" className="font-bold text-gray-800">
+        <Typography variant="h4" fontWeight="bold" color="text.primary">
           {isView ? "View Rule" : isNew ? "Create New Rule" : "Edit Rule"}
         </Typography>
       </Box>
 
-      <Paper className="p-6">
+      <Paper sx={{ p: 6 }}>
         <form onSubmit={handleSubmit}>
-          <Grid container spacing={3}>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
             {/* Basic Information */}
-            <Grid item xs={12}>
-              <Typography variant="h6" className="font-medium mb-3">
+            <Box>
+              <Typography variant="h6" fontWeight="medium" mb={3}>
                 Basic Information
               </Typography>
-            </Grid>
 
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Rule Name"
-                name="name"
-                value={formData.name || ""}
-                onChange={handleChange}
-                required
-                disabled={isView}
-              />
-            </Grid>
+              <Box
+                display="grid"
+                gridTemplateColumns={{ xs: "1fr", md: "1fr 1fr" }}
+                gap={3}
+              >
+                <TextField
+                  fullWidth
+                  label="Rule Name"
+                  name="name"
+                  value={formData.name || ""}
+                  onChange={handleTextChange}
+                  required
+                  disabled={isView}
+                />
 
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth disabled={isView}>
-                <InputLabel>Rule Type</InputLabel>
-                <Select
-                  name="type"
-                  value={formData.type || AgentRuleType.BLOCK}
-                  onChange={handleChange as any}
-                  label="Rule Type"
-                >
-                  <MenuItem value={AgentRuleType.ALLOW}>Allow</MenuItem>
-                  <MenuItem value={AgentRuleType.BLOCK}>Block</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
+                <FormControl fullWidth disabled={isView}>
+                  <InputLabel>Rule Type</InputLabel>
+                  <Select
+                    name="type"
+                    value={formData.type || AgentRuleType.BLOCK}
+                    onChange={handleSelectChange}
+                    label="Rule Type"
+                  >
+                    <MenuItem value={AgentRuleType.ALLOW}>Allow</MenuItem>
+                    <MenuItem value={AgentRuleType.BLOCK}>Block</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
 
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Description"
-                name="description"
-                value={formData.description || ""}
-                onChange={handleChange}
-                multiline
-                rows={2}
-                disabled={isView}
-              />
-            </Grid>
+              <Box mt={3}>
+                <TextField
+                  fullWidth
+                  label="Description"
+                  name="description"
+                  value={formData.description || ""}
+                  onChange={handleTextChange}
+                  multiline
+                  rows={2}
+                  disabled={isView}
+                />
+              </Box>
+            </Box>
 
             {/* Resources */}
-            <Grid item xs={12}>
-              <Typography
-                variant="h6"
-                className="font-medium mb-3 pt-3 border-t border-gray-200"
-              >
+            <Box mt={3} pt={3} borderTop="1px solid" borderColor="divider">
+              <Typography variant="h6" fontWeight="medium" mb={1}>
                 Resources
               </Typography>
-              <Typography variant="body2" className="text-gray-500 mb-3">
+              <Typography variant="body2" color="text.secondary" mb={3}>
                 Specify the resources this rule applies to (websites,
                 applications, files)
               </Typography>
-            </Grid>
 
-            {/* Websites */}
-            <Grid item xs={12}>
-              <Typography variant="subtitle1" className="font-medium mb-2">
-                Websites
-              </Typography>
-              <Box className="flex flex-wrap gap-1 mb-3">
-                {formData.resources?.websites?.map((website, index) => (
-                  <Chip
-                    key={index}
-                    label={website}
-                    onDelete={
-                      isView
-                        ? undefined
-                        : () => handleRemoveItem("websites", index)
-                    }
-                    color="primary"
-                    variant="outlined"
-                  />
-                ))}
-                {!formData.resources?.websites?.length && (
-                  <Typography variant="body2" className="text-gray-500">
-                    No websites added yet
-                  </Typography>
+              {/* Websites */}
+              <Box mb={3}>
+                <Typography variant="subtitle1" fontWeight="medium" mb={2}>
+                  Websites
+                </Typography>
+                <Box display="flex" flexWrap="wrap" gap={1} mb={3}>
+                  {formData.resources?.websites?.map((website, index) => (
+                    <Chip
+                      key={index}
+                      label={website}
+                      onDelete={
+                        isView
+                          ? undefined
+                          : () => handleRemoveItem("websites", index)
+                      }
+                      color="primary"
+                      variant="outlined"
+                    />
+                  ))}
+                  {!formData.resources?.websites?.length && (
+                    <Typography variant="body2" color="text.secondary">
+                      No websites added yet
+                    </Typography>
+                  )}
+                </Box>
+
+                {!isView && (
+                  <Box display="flex" gap={2} mb={3}>
+                    <TextField
+                      size="small"
+                      label="Add Website"
+                      placeholder="example.com"
+                      value={newItem.website}
+                      onChange={(e) => handleNewItemChange(e, "website")}
+                      sx={{ flexGrow: 1 }}
+                    />
+                    <Button
+                      variant="outlined"
+                      onClick={() => handleAddItem("websites")}
+                      disabled={!newItem.website.trim()}
+                    >
+                      Add
+                    </Button>
+                  </Box>
                 )}
               </Box>
 
-              {!isView && (
-                <Box className="flex gap-2 mb-3">
-                  <TextField
-                    size="small"
-                    label="Add Website"
-                    placeholder="example.com"
-                    value={newItem.website}
-                    onChange={(e) => handleNewItemChange(e, "website")}
-                    className="flex-grow"
-                  />
-                  <Button
-                    variant="outlined"
-                    onClick={() => handleAddItem("websites")}
-                    disabled={!newItem.website.trim()}
-                  >
-                    Add
-                  </Button>
+              {/* Applications */}
+              <Box mb={3}>
+                <Typography variant="subtitle1" fontWeight="medium" mb={2}>
+                  Applications
+                </Typography>
+                <Box display="flex" flexWrap="wrap" gap={1} mb={3}>
+                  {formData.resources?.applications?.map((app, index) => (
+                    <Chip
+                      key={index}
+                      label={app}
+                      onDelete={
+                        isView
+                          ? undefined
+                          : () => handleRemoveItem("applications", index)
+                      }
+                      color="secondary"
+                      variant="outlined"
+                    />
+                  ))}
+                  {!formData.resources?.applications?.length && (
+                    <Typography variant="body2" color="text.secondary">
+                      No applications added yet
+                    </Typography>
+                  )}
                 </Box>
-              )}
-            </Grid>
 
-            {/* Applications */}
-            <Grid item xs={12}>
-              <Typography variant="subtitle1" className="font-medium mb-2">
-                Applications
-              </Typography>
-              <Box className="flex flex-wrap gap-1 mb-3">
-                {formData.resources?.applications?.map((app, index) => (
-                  <Chip
-                    key={index}
-                    label={app}
-                    onDelete={
-                      isView
-                        ? undefined
-                        : () => handleRemoveItem("applications", index)
-                    }
-                    color="secondary"
-                    variant="outlined"
-                  />
-                ))}
-                {!formData.resources?.applications?.length && (
-                  <Typography variant="body2" className="text-gray-500">
-                    No applications added yet
-                  </Typography>
+                {!isView && (
+                  <Box display="flex" gap={2} mb={3}>
+                    <TextField
+                      size="small"
+                      label="Add Application"
+                      placeholder="chrome.exe"
+                      value={newItem.application}
+                      onChange={(e) => handleNewItemChange(e, "application")}
+                      sx={{ flexGrow: 1 }}
+                    />
+                    <Button
+                      variant="outlined"
+                      onClick={() => handleAddItem("applications")}
+                      disabled={!newItem.application.trim()}
+                    >
+                      Add
+                    </Button>
+                  </Box>
                 )}
               </Box>
 
-              {!isView && (
-                <Box className="flex gap-2 mb-3">
-                  <TextField
-                    size="small"
-                    label="Add Application"
-                    placeholder="chrome.exe"
-                    value={newItem.application}
-                    onChange={(e) => handleNewItemChange(e, "application")}
-                    className="flex-grow"
-                  />
-                  <Button
-                    variant="outlined"
-                    onClick={() => handleAddItem("applications")}
-                    disabled={!newItem.application.trim()}
-                  >
-                    Add
-                  </Button>
+              {/* Files/Directories */}
+              <Box mb={3}>
+                <Typography variant="subtitle1" fontWeight="medium" mb={2}>
+                  Files/Directories
+                </Typography>
+                <Box display="flex" flexWrap="wrap" gap={1} mb={3}>
+                  {formData.resources?.files?.map((file, index) => (
+                    <Chip
+                      key={index}
+                      label={file}
+                      onDelete={
+                        isView
+                          ? undefined
+                          : () => handleRemoveItem("files", index)
+                      }
+                      color="info"
+                      variant="outlined"
+                    />
+                  ))}
+                  {!formData.resources?.files?.length && (
+                    <Typography variant="body2" color="text.secondary">
+                      No files or directories added yet
+                    </Typography>
+                  )}
                 </Box>
-              )}
-            </Grid>
 
-            {/* Files/Directories */}
-            <Grid item xs={12}>
-              <Typography variant="subtitle1" className="font-medium mb-2">
-                Files/Directories
-              </Typography>
-              <Box className="flex flex-wrap gap-1 mb-3">
-                {formData.resources?.files?.map((file, index) => (
-                  <Chip
-                    key={index}
-                    label={file}
-                    onDelete={
-                      isView
-                        ? undefined
-                        : () => handleRemoveItem("files", index)
-                    }
-                    color="info"
-                    variant="outlined"
-                  />
-                ))}
-                {!formData.resources?.files?.length && (
-                  <Typography variant="body2" className="text-gray-500">
-                    No files or directories added yet
-                  </Typography>
+                {!isView && (
+                  <Box display="flex" gap={2} mb={3}>
+                    <TextField
+                      size="small"
+                      label="Add File/Directory"
+                      placeholder="C:\Path\To\File.txt"
+                      value={newItem.file}
+                      onChange={(e) => handleNewItemChange(e, "file")}
+                      sx={{ flexGrow: 1 }}
+                    />
+                    <Button
+                      variant="outlined"
+                      onClick={() => handleAddItem("files")}
+                      disabled={!newItem.file.trim()}
+                    >
+                      Add
+                    </Button>
+                  </Box>
                 )}
               </Box>
-
-              {!isView && (
-                <Box className="flex gap-2 mb-3">
-                  <TextField
-                    size="small"
-                    label="Add File/Directory"
-                    placeholder="C:\Path\To\File.txt"
-                    value={newItem.file}
-                    onChange={(e) => handleNewItemChange(e, "file")}
-                    className="flex-grow"
-                  />
-                  <Button
-                    variant="outlined"
-                    onClick={() => handleAddItem("files")}
-                    disabled={!newItem.file.trim()}
-                  >
-                    Add
-                  </Button>
-                </Box>
-              )}
-            </Grid>
+            </Box>
 
             {/* Rule Applies To */}
-            <Grid item xs={12}>
-              <Typography
-                variant="h6"
-                className="font-medium mb-3 pt-3 border-t border-gray-200"
-              >
+            <Box mt={3} pt={3} borderTop="1px solid" borderColor="divider">
+              <Typography variant="h6" fontWeight="medium" mb={1}>
                 Rule Applies To
               </Typography>
-              <Typography variant="body2" className="text-gray-500 mb-3">
+              <Typography variant="body2" color="text.secondary" mb={3}>
                 Specify which users, departments, or roles this rule applies to
               </Typography>
-            </Grid>
 
-            <Grid item xs={12}>
-              <FormControl fullWidth disabled={isView} className="mb-3">
-                <InputLabel>Users</InputLabel>
-                <Select
-                  multiple
-                  name="appliesTo.users"
-                  value={formData.appliesTo?.users || []}
-                  onChange={handleChange as any}
-                  input={<OutlinedInput label="Users" />}
-                  renderValue={(selected) => (
-                    <Box className="flex flex-wrap gap-1">
-                      {selected.map((userId) => {
-                        const user = users.find((u) => u._id === userId);
-                        return (
-                          <Chip
-                            key={userId}
-                            label={
-                              user
-                                ? `${user.firstName} ${user.lastName}`
-                                : userId
-                            }
-                            size="small"
-                          />
-                        );
-                      })}
-                    </Box>
-                  )}
-                >
-                  {users.map((user) => (
-                    <MenuItem key={user._id} value={user._id}>
-                      <Checkbox
-                        checked={
-                          (formData.appliesTo?.users || []).indexOf(user._id) >
-                          -1
-                        }
-                      />
-                      <ListItemText
-                        primary={`${user.firstName} ${user.lastName} (${user.email})`}
-                      />
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+              <Box mb={3}>
+                <FormControl fullWidth disabled={isView} sx={{ mb: 3 }}>
+                  <InputLabel>Users</InputLabel>
+                  <Select
+                    multiple
+                    name="appliesTo.users"
+                    value={formData.appliesTo?.users || []}
+                    onChange={handleSelectChange}
+                    input={<OutlinedInput label="Users" />}
+                    renderValue={(selected) => (
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                        {(selected as string[]).map((userId) => {
+                          const user = users.find((u) => u._id === userId);
+                          return (
+                            <Chip
+                              key={userId}
+                              label={
+                                user
+                                  ? `${user.firstName} ${user.lastName}`
+                                  : userId
+                              }
+                              size="small"
+                            />
+                          );
+                        })}
+                      </Box>
+                    )}
+                  >
+                    {users.map((user) => (
+                      <MenuItem key={user._id} value={user._id}>
+                        <Checkbox
+                          checked={
+                            (formData.appliesTo?.users || []).indexOf(
+                              user._id
+                            ) > -1
+                          }
+                        />
+                        <ListItemText
+                          primary={`${user.firstName} ${user.lastName} (${user.email})`}
+                        />
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
 
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth disabled={isView} className="mb-3">
-                <InputLabel>Departments</InputLabel>
-                <Select
-                  multiple
-                  name="appliesTo.departments"
-                  value={formData.appliesTo?.departments || []}
-                  onChange={handleChange as any}
-                  input={<OutlinedInput label="Departments" />}
-                  renderValue={(selected) => (
-                    <Box className="flex flex-wrap gap-1">
-                      {selected.map((dept) => (
-                        <Chip key={dept} label={dept} size="small" />
-                      ))}
-                    </Box>
-                  )}
-                >
-                  {departments.map((dept) => (
-                    <MenuItem key={dept} value={dept}>
-                      <Checkbox
-                        checked={
-                          (formData.appliesTo?.departments || []).indexOf(
-                            dept
-                          ) > -1
-                        }
-                      />
-                      <ListItemText primary={dept} />
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+              <Box
+                display="grid"
+                gridTemplateColumns={{ xs: "1fr", md: "1fr 1fr" }}
+                gap={3}
+              >
+                <FormControl fullWidth disabled={isView} sx={{ mb: 3 }}>
+                  <InputLabel>Departments</InputLabel>
+                  <Select
+                    multiple
+                    name="appliesTo.departments"
+                    value={formData.appliesTo?.departments || []}
+                    onChange={handleSelectChange}
+                    input={<OutlinedInput label="Departments" />}
+                    renderValue={(selected) => (
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                        {(selected as string[]).map((dept) => (
+                          <Chip key={dept} label={dept} size="small" />
+                        ))}
+                      </Box>
+                    )}
+                  >
+                    {departments.map((dept) => (
+                      <MenuItem key={dept} value={dept}>
+                        <Checkbox
+                          checked={
+                            (formData.appliesTo?.departments || []).indexOf(
+                              dept
+                            ) > -1
+                          }
+                        />
+                        <ListItemText primary={dept} />
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
 
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth disabled={isView} className="mb-3">
-                <InputLabel>Roles</InputLabel>
-                <Select
-                  multiple
-                  name="appliesTo.roles"
-                  value={formData.appliesTo?.roles || []}
-                  onChange={handleChange as any}
-                  input={<OutlinedInput label="Roles" />}
-                  renderValue={(selected) => (
-                    <Box className="flex flex-wrap gap-1">
-                      {selected.map((role) => (
-                        <Chip key={role} label={role} size="small" />
-                      ))}
-                    </Box>
-                  )}
-                >
-                  {roles.map((role) => (
-                    <MenuItem key={role} value={role}>
-                      <Checkbox
-                        checked={
-                          (formData.appliesTo?.roles || []).indexOf(role) > -1
-                        }
-                      />
-                      <ListItemText primary={role} />
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+                <FormControl fullWidth disabled={isView} sx={{ mb: 3 }}>
+                  <InputLabel>Roles</InputLabel>
+                  <Select
+                    multiple
+                    name="appliesTo.roles"
+                    value={formData.appliesTo?.roles || []}
+                    onChange={handleSelectChange}
+                    input={<OutlinedInput label="Roles" />}
+                    renderValue={(selected) => (
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                        {(selected as string[]).map((role) => (
+                          <Chip key={role} label={role} size="small" />
+                        ))}
+                      </Box>
+                    )}
+                  >
+                    {roles.map((role) => (
+                      <MenuItem key={role} value={role}>
+                        <Checkbox
+                          checked={
+                            (formData.appliesTo?.roles || []).indexOf(role) > -1
+                          }
+                        />
+                        <ListItemText primary={role} />
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+            </Box>
 
             {/* Time Restrictions */}
-            <Grid item xs={12}>
-              <Typography
-                variant="h6"
-                className="font-medium mb-3 pt-3 border-t border-gray-200"
-              >
+            <Box mt={3} pt={3} borderTop="1px solid" borderColor="divider">
+              <Typography variant="h6" fontWeight="medium" mb={1}>
                 Time Restrictions
               </Typography>
-              <Typography variant="body2" className="text-gray-500 mb-3">
+              <Typography variant="body2" color="text.secondary" mb={3}>
                 Optionally restrict when this rule is active
               </Typography>
-            </Grid>
 
-            <Grid item xs={12}>
               <FormControlLabel
                 control={
                   <Switch
                     checked={
                       formData.conditions?.timeRestrictions?.enabled || false
                     }
-                    onChange={handleChange}
+                    onChange={handleSwitchChange}
                     name="timeRestrictionsEnabled"
                     color="primary"
                     disabled={isView}
@@ -642,11 +742,14 @@ const AgentRuleForm: React.FC<AgentRuleFormProps> = ({ viewOnly = false }) => {
                 }
                 label="Enable time restrictions"
               />
-            </Grid>
 
-            {formData.conditions?.timeRestrictions?.enabled && (
-              <>
-                <Grid item xs={12} md={6}>
+              {formData.conditions?.timeRestrictions?.enabled && (
+                <Box
+                  mt={3}
+                  display="grid"
+                  gridTemplateColumns={{ xs: "1fr", md: "1fr 1fr" }}
+                  gap={3}
+                >
                   <TextField
                     fullWidth
                     label="Start Time"
@@ -656,12 +759,11 @@ const AgentRuleForm: React.FC<AgentRuleFormProps> = ({ viewOnly = false }) => {
                       formData.conditions?.timeRestrictions?.startTime ||
                       "09:00"
                     }
-                    onChange={handleChange}
+                    onChange={handleTextChange}
                     InputLabelProps={{ shrink: true }}
                     disabled={isView}
                   />
-                </Grid>
-                <Grid item xs={12} md={6}>
+
                   <TextField
                     fullWidth
                     label="End Time"
@@ -670,131 +772,140 @@ const AgentRuleForm: React.FC<AgentRuleFormProps> = ({ viewOnly = false }) => {
                     value={
                       formData.conditions?.timeRestrictions?.endTime || "17:00"
                     }
-                    onChange={handleChange}
+                    onChange={handleTextChange}
                     InputLabelProps={{ shrink: true }}
                     disabled={isView}
                   />
-                </Grid>
-                <Grid item xs={12}>
-                  <FormControl fullWidth disabled={isView}>
-                    <InputLabel>Days of Week</InputLabel>
-                    <Select
-                      multiple
-                      name="days"
-                      value={
-                        formData.conditions?.timeRestrictions?.days || [
-                          1, 2, 3, 4, 5,
-                        ]
-                      }
-                      onChange={handleChange as any}
-                      input={<OutlinedInput label="Days of Week" />}
-                      renderValue={(selected) => (
-                        <Box className="flex flex-wrap gap-1">
-                          {selected.map((day) => (
-                            <Chip
-                              key={day}
-                              label={
-                                weekdays.find((d) => d.value === day)?.label ||
-                                day
+
+                  <Box gridColumn={{ xs: "1", md: "span 2" }}>
+                    <FormControl fullWidth disabled={isView}>
+                      <InputLabel>Days of Week</InputLabel>
+                      <Select
+                        multiple
+                        name="days"
+                        value={
+                          formData.conditions?.timeRestrictions?.days || [
+                            1, 2, 3, 4, 5,
+                          ]
+                        }
+                        onChange={handleSelectChange}
+                        input={<OutlinedInput label="Days of Week" />}
+                        renderValue={(selected) => (
+                          <Box
+                            sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}
+                          >
+                            {(selected as number[]).map((day) => (
+                              <Chip
+                                key={day}
+                                label={
+                                  weekdays.find((d) => d.value === day)
+                                    ?.label || day.toString()
+                                }
+                                size="small"
+                              />
+                            ))}
+                          </Box>
+                        )}
+                      >
+                        {weekdays.map((day) => (
+                          <MenuItem key={day.value} value={day.value}>
+                            <Checkbox
+                              checked={
+                                (
+                                  formData.conditions?.timeRestrictions?.days ||
+                                  []
+                                ).indexOf(day.value) > -1
                               }
-                              size="small"
                             />
-                          ))}
-                        </Box>
-                      )}
-                    >
-                      {weekdays.map((day) => (
-                        <MenuItem key={day.value} value={day.value}>
-                          <Checkbox
-                            checked={
-                              (
-                                formData.conditions?.timeRestrictions?.days ||
-                                []
-                              ).indexOf(day.value) > -1
-                            }
-                          />
-                          <ListItemText primary={day.label} />
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-              </>
-            )}
+                            <ListItemText primary={day.label} />
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                </Box>
+              )}
+            </Box>
 
             {/* Additional Settings */}
-            <Grid item xs={12}>
-              <Typography
-                variant="h6"
-                className="font-medium mb-3 pt-3 border-t border-gray-200"
-              >
+            <Box mt={3} pt={3} borderTop="1px solid" borderColor="divider">
+              <Typography variant="h6" fontWeight="medium" mb={3}>
                 Additional Settings
               </Typography>
-            </Grid>
 
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Priority"
-                name="priority"
-                type="number"
-                value={formData.priority || 10}
-                onChange={handleChange}
-                InputProps={{ inputProps: { min: 1, max: 100 } }}
-                helperText="Higher priority rules are applied first (1-100)"
-                disabled={isView}
-              />
-            </Grid>
+              <Box
+                display="grid"
+                gridTemplateColumns={{ xs: "1fr", md: "1fr 1fr" }}
+                gap={3}
+              >
+                <TextField
+                  fullWidth
+                  label="Priority"
+                  name="priority"
+                  type="number"
+                  value={formData.priority || 10}
+                  onChange={handleTextChange}
+                  inputProps={{ min: 1, max: 100 }}
+                  helperText="Higher priority rules are applied first (1-100)"
+                  disabled={isView}
+                />
 
-            <Grid item xs={12} md={6}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.isActive}
-                    onChange={handleChange}
-                    name="isActive"
-                    color="primary"
-                    disabled={isView}
+                <Box display="flex" alignItems="center">
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={
+                          formData.isActive === undefined
+                            ? true
+                            : formData.isActive
+                        }
+                        onChange={handleSwitchChange}
+                        name="isActive"
+                        color="primary"
+                        disabled={isView}
+                      />
+                    }
+                    label="Rule is active"
                   />
-                }
-                label="Rule is active"
-              />
-            </Grid>
+                </Box>
+              </Box>
+            </Box>
 
             {/* Action Buttons */}
-            <Grid item xs={12} className="pt-3 border-t border-gray-200">
-              <Box className="flex justify-between">
-                <Button variant="outlined" component={Link} to="/agent/rules">
-                  {isView ? "Back" : "Cancel"}
-                </Button>
+            <Box
+              mt={4}
+              pt={3}
+              borderTop="1px solid"
+              borderColor="divider"
+              display="flex"
+              justifyContent="space-between"
+            >
+              <Button variant="outlined" component={Link} to="/agent/rules">
+                {isView ? "Back" : "Cancel"}
+              </Button>
 
-                {isView ? (
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    component={Link}
-                    to={`/agent/rules/${id}/edit`}
-                  >
-                    Edit Rule
-                  </Button>
-                ) : (
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    color="primary"
-                    startIcon={<SaveIcon />}
-                    disabled={saving}
-                  >
-                    {saving
-                      ? "Saving..."
-                      : isNew
-                      ? "Create Rule"
-                      : "Update Rule"}
-                  </Button>
-                )}
-              </Box>
-            </Grid>
-          </Grid>
+              {isView ? (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  component={Link}
+                  to={`/agent/rules/${id}/edit`}
+                >
+                  Edit Rule
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color="primary"
+                  startIcon={<SaveIcon />}
+                  disabled={saving}
+                >
+                  {saving ? "Saving..." : isNew ? "Create Rule" : "Update Rule"}
+                </Button>
+              )}
+            </Box>
+          </Box>
         </form>
       </Paper>
     </MainLayout>
