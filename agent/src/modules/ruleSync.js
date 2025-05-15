@@ -1,4 +1,6 @@
+// agent/src/modules/ruleSync.js - Updated
 const axios = require("axios");
+const mongoDbDirect = require("./mongoDbDirect");
 const logger = require("../main/logger");
 
 // Helper for finding user rules by handling different ID formats
@@ -37,18 +39,18 @@ const getRules = async (userId, token, apiUrl) => {
   try {
     logger.info(`Fetching access rules for user ${userId}`);
 
-    // First try - using the original endpoint
+    // First try - using the Agent API endpoint
     try {
-      const response = await axios.get(`${apiUrl}/rules/user/${userId}`, {
+      const response = await axios.get(`${apiUrl}/agent/rules/user/${userId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
         timeout: 10000, // Add timeout to prevent hanging
       });
 
-      if (response.data && response.data.success) {
-        const rules = response.data.data;
-        logger.info(`Received ${rules.length} access rules for user ${userId}`);
+      if (response.data) {
+        const rules = response.data;
+        logger.info(`Received ${rules.length} access rules for user ${userId} from Agent API`);
 
         // Process rules to normalize the structure for consistent handling
         const normalizedRules = rules.map((rule) =>
@@ -85,103 +87,30 @@ const getRules = async (userId, token, apiUrl) => {
 
         return normalizedRules;
       } else {
-        // If API returned success: false, but not a 500 error
-        logger.warn(
-          `API returned success: false - ${
-            response.data.error || "Unknown error"
-          }`
-        );
-        throw new Error(response.data.error || "Failed to get rules");
+        throw new Error("Invalid response from Agent API");
       }
-    } catch (initialError) {
-      // If we get a 500 error from the specific user endpoint,
-      // fall back to getting all rules and filtering client-side
-      if (initialError.response && initialError.response.status === 500) {
-        logger.warn(
-          `Error from user-specific endpoint (${initialError.message}), trying fallback approach`
-        );
-
-        // Fallback - get all rules and filter client-side
-        const allRulesResponse = await axios.get(`${apiUrl}/rules`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (allRulesResponse.data && allRulesResponse.data.success) {
-          // Get user details
-          const userResponse = await axios.get(`${apiUrl}/users/${userId}`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
-
-          if (!userResponse.data || !userResponse.data.success) {
-            throw new Error("Could not get user details for rules filtering");
-          }
-
-          const user = userResponse.data.data;
-          logger.info(
-            `Got user details: ${user.email}, Department: ${user.department}, Role: ${user.role}`
-          );
-
-          // Filter rules client-side based on user's department, role, and direct user assignment
-          const allRules = allRulesResponse.data.data;
-          const applicableRules = allRules.filter((rule) => {
-            // Only include active rules
-            if (!rule.isActive) return false;
-
-            // Check for direct user assignment in appliesTo.users array
-            let userMatch = false;
-            if (
-              rule.appliesTo &&
-              rule.appliesTo.users &&
-              Array.isArray(rule.appliesTo.users)
-            ) {
-              userMatch = rule.appliesTo.users.some((ruleUser) =>
-                isUserIdMatch(ruleUser, userId)
-              );
-            }
-
-            // Check if rule applies to user's department
-            const departmentMatch =
-              rule.appliesTo &&
-              rule.appliesTo.departments &&
-              Array.isArray(rule.appliesTo.departments) &&
-              rule.appliesTo.departments.includes(user.department);
-
-            // Check if rule applies to user's role
-            const roleMatch =
-              rule.appliesTo &&
-              rule.appliesTo.roles &&
-              Array.isArray(rule.appliesTo.roles) &&
-              rule.appliesTo.roles.includes(user.role);
-
-            // Add a flag to mark rules directly assigned to the user
-            if (userMatch) {
-              rule.__userSpecific = true;
-            }
-
-            return userMatch || departmentMatch || roleMatch;
-          });
-
-          // Sort by priority and normalize structure
-          applicableRules.sort((a, b) => (b.priority || 0) - (a.priority || 0));
-          const normalizedRules = applicableRules.map((rule) =>
-            normalizeRuleStructure(rule, userId)
-          );
-
-          logger.info(
-            `Filtered ${normalizedRules.length} applicable rules from ${allRules.length} total rules`
-          );
-          return normalizedRules;
-        } else {
-          throw new Error("Failed to get rules with fallback method");
-        }
-      } else {
-        // If it's not a 500 error, re-throw the original error
-        throw initialError;
+    } catch (apiError) {
+      // If API request fails, log the error and try direct MongoDB connection
+      logger.warn(
+        `Error getting rules from Agent API: ${apiError.message}, trying MongoDB direct connection`
+      );
+      
+      // Connect to MongoDB
+      const mongoUri = require("../main/main").config.mongoUri;
+      const connected = await mongoDbDirect.connect(mongoUri, "zero_trust_db");
+      
+      if (!connected) {
+        throw new Error("Failed to connect to MongoDB");
       }
+      
+      // Get rules directly from MongoDB
+      const rules = await mongoDbDirect.getRulesForUser(userId);
+      
+      logger.info(`Retrieved ${rules.length} rules from MongoDB directly`);
+      
+      // Normalize and return the rules
+      const normalizedRules = rules.map((rule) => normalizeRuleStructure(rule, userId));
+      return normalizedRules;
     }
   } catch (error) {
     logger.error(`Error fetching access rules: ${error.message}`);
@@ -204,6 +133,11 @@ const normalizeRuleStructure = (rule, userId) => {
 
   // Log the raw rule structure for debugging
   logger.debug(`Normalizing rule: ${JSON.stringify(rule)}`);
+
+  // Make sure ID uses consistent format (_id to id if needed)
+  if (rule._id && !rule.id) {
+    normalizedRule.id = rule._id;
+  }
 
   // Check if this rule is directly assigned to the user
   if (
@@ -294,32 +228,59 @@ const sendActivityLogs = async (logsData, token, apiUrl) => {
   try {
     logger.info(`Sending ${logsData.length} activity logs to server`);
 
-    const response = await axios.post(
-      `${apiUrl}/logs/batch`,
-      { logs: logsData },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    if (response.data && response.data.success) {
-      logger.info(
-        `Successfully sent ${logsData.length} activity logs to server`
+    // Try using the Agent API endpoint first
+    try {
+      const response = await axios.post(
+        `${apiUrl}/agent/logs/batch`,
+        { logs: logsData },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
       );
-      return {
-        success: true,
-        count: logsData.length,
-      };
-    } else {
-      const errorMsg = response.data.error || "Failed to send activity logs";
-      logger.warn(`Failed to send activity logs: ${errorMsg}`);
-      return {
-        success: false,
-        error: errorMsg,
-      };
+
+      if (response.data && response.data.success) {
+        logger.info(
+          `Successfully sent ${logsData.length} activity logs to server via Agent API`
+        );
+        return {
+          success: true,
+          count: logsData.length,
+        };
+      } else {
+        throw new Error("Invalid response from Agent API");
+      }
+    } catch (apiError) {
+      logger.warn(
+        `Error sending logs to Agent API: ${apiError.message}, trying MongoDB direct connection`
+      );
+      
+      // Connect to MongoDB
+      const mongoUri = require("../main/main").config.mongoUri;
+      const connected = await mongoDbDirect.connect(mongoUri, "zero_trust_db");
+      
+      if (!connected) {
+        throw new Error("Failed to connect to MongoDB");
+      }
+      
+      // Get the user ID from the first log
+      let userId = null;
+      if (logsData.length > 0 && logsData[0].userId) {
+        userId = logsData[0].userId;
+      }
+      
+      // Log activities directly to MongoDB
+      const result = await mongoDbDirect.logActivities(logsData, userId);
+      
+      if (result.success) {
+        logger.info(`Successfully logged ${result.count} activities directly to MongoDB`);
+      } else {
+        throw new Error(`Failed to log activities to MongoDB: ${result.error || "Unknown error"}`);
+      }
+      
+      return result;
     }
   } catch (error) {
     logger.error(`Error sending activity logs: ${error.message}`);

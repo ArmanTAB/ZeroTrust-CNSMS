@@ -1,3 +1,4 @@
+// agent/src/main/main.js - Updated Configuration
 const { app, BrowserWindow, ipcMain, Menu, Tray, dialog } = require("electron");
 const path = require("path");
 const url = require("url");
@@ -11,6 +12,7 @@ const networkMonitor = require("../modules/networkMonitor");
 const processMonitor = require("../modules/processMonitor");
 const fileMonitor = require("../modules/fileMonitor");
 const ruleSync = require("../modules/ruleSync");
+const settings = require("./settings");
 
 // Global variables
 let mainWindow;
@@ -23,13 +25,15 @@ let authToken = null;
 
 // Configuration
 const config = {
-  apiUrl: "http://127.0.0.1:8000/api", // Changed to IP address instead of localhost
+  apiUrl: "http://localhost:8000/api",
   logLevel: "info",
   updateInterval: 5 * 60 * 1000, // 5 minutes
-  appName: "Access Control Agent",
+  appName: "Zero Trust Agent",
+  dbName: "zero_trust_db", // Explicitly set database name
+  // MongoDB connection URI
   mongoUri:
     process.env.MONGODB_URI ||
-    "mongodb+srv://zt_admin:ZZteeGtWYMVPKNaq@cluster0.f2qts.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
+    "mongodb+srv://zt_admin:ZZteeGtWYMVPKNaq@cluster0.f2qts.mongodb.net/zero_trust_db?retryWrites=true&w=majority&appName=Cluster0",
 };
 
 // Cleanup previous session at startup
@@ -697,6 +701,24 @@ app.whenReady().then(async () => {
   // Initialize logging
   logger.init(config.logLevel);
   logger.info("Application started");
+
+  // Initialize settings
+  const appSettings = settings.init();
+
+  // Update config with settings
+  if (appSettings.mongoUri) {
+    config.mongoUri = appSettings.mongoUri;
+  }
+  if (appSettings.apiUrl) {
+    config.apiUrl = appSettings.apiUrl;
+  }
+  if (appSettings.dbName) {
+    config.dbName = appSettings.dbName;
+  }
+
+  logger.info(`Using MongoDB URI: ${config.mongoUri}`);
+  logger.info(`Using API URL: ${config.apiUrl}`);
+  logger.info(`Using database: ${config.dbName}`);
 
   // Clean up previous session
   await cleanupPreviousSession();

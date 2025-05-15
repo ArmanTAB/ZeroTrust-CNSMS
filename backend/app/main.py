@@ -1,4 +1,4 @@
-# backend/app/main.py
+# backend/app/main.py - Gradual Implementation
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.auth.routes import router as auth_router
@@ -6,6 +6,7 @@ from app.devices.routes import router as devices_router
 from app.access.routes import router as access_router
 from app.devices.vulnerability_routes import router as vulnerability_router
 from app.access.google_drive_routes import router as google_drive_router
+# We'll add the agent router later
 from app.db import connect_to_mongo, close_mongo_connection
 import logging
 
@@ -24,7 +25,6 @@ origins = [
     "http://localhost:3000",  # Frontend React
     "http://localhost:8000",  # Backend for development
     "http://127.0.0.1:8000",  # Backend for development
-
 ]
 
 app.add_middleware(
@@ -64,6 +64,10 @@ app.include_router(vulnerability_router)
 
 logger.info("Including Google Drive router")
 app.include_router(google_drive_router)
+
+# We'll add the agent router later
+# logger.info("Including agent router")
+# app.include_router(agent_router)
 
 @app.get("/")
 async def root():
