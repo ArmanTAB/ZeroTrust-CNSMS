@@ -10,7 +10,7 @@ from bson.objectid import ObjectId
 load_dotenv()
 
 # Get MongoDB URI from environment variables
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+MONGODB_URL = os.getenv("MONGODB_URL", "mongodb+srv://zt_admin:ZZteeGtWYMVPKNaq@cluster0.f2qts.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
 DB_NAME = "zero_trust_db"  # Adjust if your database name is different
 
 async def check_database():

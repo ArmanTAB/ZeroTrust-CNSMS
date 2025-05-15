@@ -32,70 +32,32 @@ const connect = async (mongoUri, dbName = "zero_trust_db") => {
     const options = {
       useNewUrlParser: true,
       useUnifiedTopology: true,
+      // Add these settings for MongoDB Atlas connection
+      retryWrites: true,
+      w: "majority",
+      connectTimeoutMS: 30000,
+      socketTimeoutMS: 30000,
+      serverSelectionTimeoutMS: 30000,
     };
 
-    // Add database name if provided - properly formatted
-    const connectionString = dbName ? `${uri}/${dbName}` : uri;
-
-    logger.info(`Full connection string: ${connectionString}`);
-
+    // Connect to MongoDB Atlas
     try {
-      await mongoose.connect(connectionString, options);
+      // For MongoDB Atlas, we can directly connect using the full URI
+      await mongoose.connect(mongoUri, options);
+
+      isConnected = true;
+      logger.info("Connected to MongoDB Atlas successfully");
+
+      // Log database name
+      logger.info(
+        `Connected to database: ${mongoose.connection.name || "unknown"}`
+      );
+
+      return true;
     } catch (connectError) {
       logger.error(`MongoDB connection error: ${connectError.message}`);
-
-      // Try connecting without the database name
-      if (dbName) {
-        logger.info("Trying to connect without specifying database name...");
-        try {
-          await mongoose.connect(uri, options);
-          logger.info(
-            "Connected successfully without specifying database name"
-          );
-        } catch (retryError) {
-          logger.error(
-            `Second connection attempt failed: ${retryError.message}`
-          );
-          return false;
-        }
-      } else {
-        return false;
-      }
+      return false;
     }
-
-    isConnected = true;
-    logger.info("Connected to MongoDB successfully");
-
-    // Log database name and collection information
-    logger.info(
-      `Connected to database: ${mongoose.connection.name || "unknown"}`
-    );
-
-    // Log available collections
-    try {
-      const collections = await mongoose.connection.db
-        .listCollections()
-        .toArray();
-      const collectionNames = collections.map((c) => c.name);
-
-      logger.info(`Available collections: ${collectionNames.join(", ")}`);
-
-      // Check if required collections exist
-      const hasAgentUsers = collectionNames.includes("agent_users");
-      const hasAgentRules = collectionNames.includes("agent_rules");
-
-      if (!hasAgentUsers) {
-        logger.warn('Collection "agent_users" not found in database!');
-      }
-
-      if (!hasAgentRules) {
-        logger.warn('Collection "agent_rules" not found in database!');
-      }
-    } catch (err) {
-      logger.warn(`Could not list collections: ${err.message}`);
-    }
-
-    return true;
   } catch (error) {
     logger.error(`Unexpected MongoDB connection error: ${error.message}`);
     if (error.stack) {
@@ -143,11 +105,12 @@ const getUserByEmail = async (email) => {
         createdAt: Date,
         lastLogin: Date,
       },
-      { collection: "agent_users" }  // Use agent_users collection
+      { collection: "agent_users" } // Use agent_users collection
     );
 
     // Get or create User model
-    const User = mongoose.models.AgentUser || mongoose.model("AgentUser", UserSchema);
+    const User =
+      mongoose.models.AgentUser || mongoose.model("AgentUser", UserSchema);
 
     // Find user by email
     const user = await User.findOne({ email }).lean();
@@ -217,7 +180,9 @@ const authenticateUser = async (email, password) => {
     // Generate a simple token (in a real app, this would be a JWT token)
     const token = Buffer.from(`${user._id}:${Date.now()}`).toString("base64");
 
-    logger.info(`Agent user authenticated successfully: ${user.email} (${user._id})`);
+    logger.info(
+      `Agent user authenticated successfully: ${user.email} (${user._id})`
+    );
 
     // Update last login time in the database
     try {
@@ -263,7 +228,9 @@ const authenticateUser = async (email, password) => {
  */
 const getRulesForUser = async (userId) => {
   try {
-    logger.info(`Getting rules for agent user: ${userId} from MongoDB directly`);
+    logger.info(
+      `Getting rules for agent user: ${userId} from MongoDB directly`
+    );
 
     // Get user details first to determine role and department
     const userObjectId = new ObjectId(userId);
@@ -304,7 +271,7 @@ const getRulesForUser = async (userId) => {
         createdAt: Date,
         updatedAt: Date,
       },
-      { collection: "agent_rules" }  // Use agent_rules collection
+      { collection: "agent_rules" } // Use agent_rules collection
     );
 
     // Get or create AccessRule model
@@ -314,7 +281,9 @@ const getRulesForUser = async (userId) => {
 
     // Find all active rules
     const allRules = await AccessRule.find({ isActive: true }).lean();
-    logger.info(`Found ${allRules.length} total active agent rules in database`);
+    logger.info(
+      `Found ${allRules.length} total active agent rules in database`
+    );
 
     // Filter rules that apply to this user
     const userDepartment = user.department || "";
@@ -463,10 +432,14 @@ const logActivities = async (activities, userId) => {
       .collection("agent_activities")
       .insertMany(formattedActivities);
 
-    logger.info(`Batch logged ${result.insertedCount} agent activities to MongoDB`);
+    logger.info(
+      `Batch logged ${result.insertedCount} agent activities to MongoDB`
+    );
     return { success: true, count: result.insertedCount };
   } catch (error) {
-    logger.error(`Error batch logging agent activities to MongoDB: ${error.message}`);
+    logger.error(
+      `Error batch logging agent activities to MongoDB: ${error.message}`
+    );
     return { success: false, error: error.message, count: 0 };
   }
 };
@@ -527,7 +500,7 @@ function getLocalIpAddress() {
     }
   }
 
-  return "127.0.0.1";   
+  return "127.0.0.1";
 }
 
 module.exports = {

@@ -29,11 +29,10 @@ const config = {
   logLevel: "info",
   updateInterval: 5 * 60 * 1000, // 5 minutes
   appName: "Zero Trust Agent",
-  dbName: "zero_trust_db", // Explicitly set database name
-  // MongoDB connection URI
+  dbName: "zero_trust_db",
+  // Use the MongoDB Atlas URI
   mongoUri:
-    process.env.MONGODB_URI ||
-    "mongodb+srv://zt_admin:ZZteeGtWYMVPKNaq@cluster0.f2qts.mongodb.net/zero_trust_db?retryWrites=true&w=majority&appName=Cluster0",
+    "mongodb+srv://zt_admin:ZZteeGtWYMVPKNaq@cluster0.f2qts.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
 };
 
 // Cleanup previous session at startup

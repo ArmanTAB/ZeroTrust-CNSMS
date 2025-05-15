@@ -3,10 +3,10 @@ const path = require("path");
 const { app } = require("electron");
 const logger = require("./logger");
 
-// Default configuration
+// Update the default configuration with your MongoDB Atlas URI
 const DEFAULT_CONFIG = {
   apiUrl: "http://localhost:8000/api",
-  mongoUri: "mongodb://localhost:27017",
+  mongoUri: "mongodb+srv://zt_admin:ZZteeGtWYMVPKNaq@cluster0.f2qts.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
   dbName: "zero_trust_db",
   logLevel: "info",
   updateInterval: 5 * 60 * 1000, // 5 minutes
