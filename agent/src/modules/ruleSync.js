@@ -1,6 +1,4 @@
-// src/modules/ruleSync.js
 const axios = require("axios");
-const { MongoClient, ObjectId } = require("mongodb");
 const logger = require("../main/logger");
 
 // Helper for finding user rules by handling different ID formats
@@ -20,7 +18,7 @@ const isUserIdMatch = (ruleUser, userId) => {
     if (ruleUser === null) return false;
 
     // Handle MongoDB ObjectId references
-    if (ruleUser._id) return ruleUser._id.toString() === userId;
+    if (ruleUser._id) return ruleUser._id === userId;
     if (ruleUser.$oid) return ruleUser.$oid === userId;
 
     // Handle objects with email property
@@ -34,124 +32,178 @@ const isUserIdMatch = (ruleUser, userId) => {
   return false;
 };
 
-// Get rules for a specific user
-async function getRules(userId, token, apiUrl) {
+// Get rules for user
+const getRules = async (userId, token, apiUrl) => {
   try {
     logger.info(`Fetching access rules for user ${userId}`);
 
-    // First try - using API endpoint
+    // First try - using the original endpoint
     try {
-      // Assuming your API has an endpoint for fetching user-specific rules
-      const response = await axios.get(
-        `${apiUrl}/devices/rules/user/${userId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          timeout: 10000, // Add timeout to prevent hanging
-        }
-      );
+      const response = await axios.get(`${apiUrl}/rules/user/${userId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        timeout: 10000, // Add timeout to prevent hanging
+      });
 
-      if (
-        response.data &&
-        (response.data.success || Array.isArray(response.data))
-      ) {
-        const rules = Array.isArray(response.data)
-          ? response.data
-          : response.data.data || [];
-        logger.info(
-          `Received ${rules.length} access rules for user ${userId} via API`
-        );
+      if (response.data && response.data.success) {
+        const rules = response.data.data;
+        logger.info(`Received ${rules.length} access rules for user ${userId}`);
 
         // Process rules to normalize the structure for consistent handling
         const normalizedRules = rules.map((rule) =>
           normalizeRuleStructure(rule, userId)
         );
 
+        // Log details about rules
+        normalizedRules.forEach((rule, index) => {
+          const userSpecific = rule.__userSpecific
+            ? "(Directly assigned to user)"
+            : "";
+          logger.debug(`Rule ${index + 1}: ${rule.name} ${userSpecific}`);
+          logger.debug(
+            `  Type: ${rule.type}, Priority: ${rule.priority}, Active: ${rule.isActive}`
+          );
+
+          if (rule.resources) {
+            if (rule.resources.websites && rule.resources.websites.length > 0) {
+              logger.debug(`  Websites: ${rule.resources.websites.join(", ")}`);
+            }
+            if (
+              rule.resources.applications &&
+              rule.resources.applications.length > 0
+            ) {
+              logger.debug(
+                `  Applications: ${rule.resources.applications.join(", ")}`
+              );
+            }
+            if (rule.resources.files && rule.resources.files.length > 0) {
+              logger.debug(`  Files: ${rule.resources.files.join(", ")}`);
+            }
+          }
+        });
+
         return normalizedRules;
+      } else {
+        // If API returned success: false, but not a 500 error
+        logger.warn(
+          `API returned success: false - ${
+            response.data.error || "Unknown error"
+          }`
+        );
+        throw new Error(response.data.error || "Failed to get rules");
       }
-    } catch (apiError) {
-      logger.warn(
-        `API rules fetch failed: ${apiError.message}. Trying direct MongoDB query...`
-      );
-    }
+    } catch (initialError) {
+      // If we get a 500 error from the specific user endpoint,
+      // fall back to getting all rules and filtering client-side
+      if (initialError.response && initialError.response.status === 500) {
+        logger.warn(
+          `Error from user-specific endpoint (${initialError.message}), trying fallback approach`
+        );
 
-    // If API fails, try direct MongoDB query
-    try {
-      // Find MongoDB client from auth module
-      const { MongoClient, ObjectId } = require("mongodb");
+        // Fallback - get all rules and filter client-side
+        const allRulesResponse = await axios.get(`${apiUrl}/rules`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
-      // Extract MongoDB URI from API URL
-      const mongoUri =
-        apiUrl.replace("/api", "").replace("http://", "mongodb://") +
-        "/zero_trust_db";
-
-      // Connect to MongoDB
-      const client = new MongoClient(mongoUri);
-      await client.connect();
-
-      const db = client.db("zero_trust_db");
-
-      // First, get user details to know role and department
-      const user = await db
-        .collection("users")
-        .findOne({ _id: new ObjectId(userId) });
-
-      if (!user) {
-        throw new Error(`User not found: ${userId}`);
-      }
-
-      logger.info(
-        `Found user: ${user.email}, Role: ${
-          user.role || "undefined"
-        }, Department: ${user.department || "undefined"}`
-      );
-
-      // Query for rules that apply to this user
-      // This assumes your rules collection has a structure with appliesTo fields
-      const rulesCollection = db.collection("accessrules");
-
-      const rules = await rulesCollection
-        .find({
-          $and: [
-            { isActive: true },
-            {
-              $or: [
-                { "appliesTo.users": userId },
-                { "appliesTo.roles": user.role },
-                { "appliesTo.departments": user.department },
-              ],
+        if (allRulesResponse.data && allRulesResponse.data.success) {
+          // Get user details
+          const userResponse = await axios.get(`${apiUrl}/users/${userId}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
             },
-          ],
-        })
-        .toArray();
+          });
 
-      client.close();
+          if (!userResponse.data || !userResponse.data.success) {
+            throw new Error("Could not get user details for rules filtering");
+          }
 
-      logger.info(`Found ${rules.length} applicable rules from MongoDB`);
+          const user = userResponse.data.data;
+          logger.info(
+            `Got user details: ${user.email}, Department: ${user.department}, Role: ${user.role}`
+          );
 
-      // Normalize rules
-      const normalizedRules = rules.map((rule) =>
-        normalizeRuleStructure(rule, userId)
-      );
+          // Filter rules client-side based on user's department, role, and direct user assignment
+          const allRules = allRulesResponse.data.data;
+          const applicableRules = allRules.filter((rule) => {
+            // Only include active rules
+            if (!rule.isActive) return false;
 
-      return normalizedRules;
-    } catch (mongoError) {
-      logger.error(`MongoDB rules fetch failed: ${mongoError.message}`);
+            // Check for direct user assignment in appliesTo.users array
+            let userMatch = false;
+            if (
+              rule.appliesTo &&
+              rule.appliesTo.users &&
+              Array.isArray(rule.appliesTo.users)
+            ) {
+              userMatch = rule.appliesTo.users.some((ruleUser) =>
+                isUserIdMatch(ruleUser, userId)
+              );
+            }
 
-      // Return default rules as a last resort
-      return getDefaultRules();
+            // Check if rule applies to user's department
+            const departmentMatch =
+              rule.appliesTo &&
+              rule.appliesTo.departments &&
+              Array.isArray(rule.appliesTo.departments) &&
+              rule.appliesTo.departments.includes(user.department);
+
+            // Check if rule applies to user's role
+            const roleMatch =
+              rule.appliesTo &&
+              rule.appliesTo.roles &&
+              Array.isArray(rule.appliesTo.roles) &&
+              rule.appliesTo.roles.includes(user.role);
+
+            // Add a flag to mark rules directly assigned to the user
+            if (userMatch) {
+              rule.__userSpecific = true;
+            }
+
+            return userMatch || departmentMatch || roleMatch;
+          });
+
+          // Sort by priority and normalize structure
+          applicableRules.sort((a, b) => (b.priority || 0) - (a.priority || 0));
+          const normalizedRules = applicableRules.map((rule) =>
+            normalizeRuleStructure(rule, userId)
+          );
+
+          logger.info(
+            `Filtered ${normalizedRules.length} applicable rules from ${allRules.length} total rules`
+          );
+          return normalizedRules;
+        } else {
+          throw new Error("Failed to get rules with fallback method");
+        }
+      } else {
+        // If it's not a 500 error, re-throw the original error
+        throw initialError;
+      }
     }
   } catch (error) {
     logger.error(`Error fetching access rules: ${error.message}`);
+    if (error.response) {
+      logger.error(
+        `API error details: ${JSON.stringify(error.response.data || {})}`
+      );
+    }
+
+    // Return default rules as fallback when all else fails
+    logger.warn("Returning default fallback rules");
     return getDefaultRules();
   }
-}
+};
 
 // Helper function to normalize rule structure
-function normalizeRuleStructure(rule, userId) {
+const normalizeRuleStructure = (rule, userId) => {
   // Create a deep copy to avoid modifying the original
   const normalizedRule = JSON.parse(JSON.stringify(rule));
+
+  // Log the raw rule structure for debugging
+  logger.debug(`Normalizing rule: ${JSON.stringify(rule)}`);
 
   // Check if this rule is directly assigned to the user
   if (
@@ -190,10 +242,10 @@ function normalizeRuleStructure(rule, userId) {
   }`;
 
   return normalizedRule;
-}
+};
 
 // Default fallback rules to use when server communication fails
-function getDefaultRules() {
+const getDefaultRules = () => {
   logger.warn("Using fallback default rules - minimal protection enabled");
   return [
     {
@@ -235,69 +287,39 @@ function getDefaultRules() {
       ruleName: "Emergency Fallback Rule - Block Social Media",
     },
   ];
-}
+};
 
-// Send activity logs back to the main system
-async function sendActivityLogs(logsData, token, apiUrl) {
+// Send activity logs to server
+const sendActivityLogs = async (logsData, token, apiUrl) => {
   try {
     logger.info(`Sending ${logsData.length} activity logs to server`);
 
-    // First try API
-    try {
-      const response = await axios.post(
-        `${apiUrl}/access/log/batch`,
-        { logs: logsData },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (response.data && response.data.success) {
-        logger.info(
-          `Successfully sent ${logsData.length} activity logs via API`
-        );
-        return {
-          success: true,
-          count: logsData.length,
-        };
+    const response = await axios.post(
+      `${apiUrl}/logs/batch`,
+      { logs: logsData },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
       }
-    } catch (apiError) {
-      logger.warn(
-        `API log sending failed: ${apiError.message}. Trying direct MongoDB...`
-      );
-    }
+    );
 
-    // If API fails, try direct MongoDB
-    try {
-      // Extract MongoDB URI from API URL
-      const mongoUri =
-        apiUrl.replace("/api", "").replace("http://", "mongodb://") +
-        "/zero_trust_db";
-
-      // Connect to MongoDB
-      const client = new MongoClient(mongoUri);
-      await client.connect();
-
-      const db = client.db("zero_trust_db");
-
-      // Insert logs into access_logs collection
-      const result = await db.collection("access_logs").insertMany(logsData);
-      client.close();
-
+    if (response.data && response.data.success) {
       logger.info(
-        `Successfully inserted ${result.insertedCount} logs directly into MongoDB`
+        `Successfully sent ${logsData.length} activity logs to server`
       );
-
       return {
         success: true,
-        count: result.insertedCount,
+        count: logsData.length,
       };
-    } catch (mongoError) {
-      logger.error(`MongoDB log insertion failed: ${mongoError.message}`);
-      throw mongoError;
+    } else {
+      const errorMsg = response.data.error || "Failed to send activity logs";
+      logger.warn(`Failed to send activity logs: ${errorMsg}`);
+      return {
+        success: false,
+        error: errorMsg,
+      };
     }
   } catch (error) {
     logger.error(`Error sending activity logs: ${error.message}`);
@@ -306,10 +328,10 @@ async function sendActivityLogs(logsData, token, apiUrl) {
       error: error.message,
     };
   }
-}
+};
 
-// Check if a rule is active based on time restrictions
-function isRuleActive(rule) {
+// Check rules considering time restrictions
+const isRuleActive = (rule) => {
   // Log the rule for debugging
   logger.debug(
     `Checking if rule is active: ${rule.name} (${rule.type}), isActive flag: ${rule.isActive}`
@@ -321,7 +343,13 @@ function isRuleActive(rule) {
     return false;
   }
 
-  // User-specific rules always take precedence
+  // Check if rule has resources
+  if (!rule.resources) {
+    logger.debug(`Rule "${rule.name}" has no resources`);
+    return false;
+  }
+
+  // DISABLED TIME RESTRICTIONS FOR DEBUGGING - Always consider user-specific rules active
   if (rule.__userSpecific) {
     logger.debug(
       `Rule "${rule.name}" is user-specific, ignoring time restrictions`
@@ -329,52 +357,53 @@ function isRuleActive(rule) {
     return true;
   }
 
-  // If rule has no time restrictions or they're not enabled, it's active
-  if (
-    !rule.conditions ||
-    !rule.conditions.timeRestrictions ||
-    !rule.conditions.timeRestrictions.enabled
-  ) {
+  // Time restrictions are disabled for debugging - always return true if rule is active
+  return true;
+
+  /* ORIGINAL TIME RESTRICTION CODE - Commented out for debugging
+  // If time restrictions are not enabled, rule is always active
+  if (!rule.conditions || 
+      !rule.conditions.timeRestrictions || 
+      !rule.conditions.timeRestrictions.enabled) {
     return true;
   }
-
+  
   const timeRestrictions = rule.conditions.timeRestrictions;
   const now = new Date();
-
+  
   // Check day of week (0 - Sunday, 1 - Monday, ...)
   const currentDay = now.getDay();
-
-  // If day of week is not in allowed days, rule is inactive
-  if (
-    timeRestrictions.days &&
-    timeRestrictions.days.length > 0 &&
-    !timeRestrictions.days.includes(currentDay)
-  ) {
+  
+  // If day of week is not in the list of allowed days, rule is inactive
+  if (timeRestrictions.days && 
+      timeRestrictions.days.length > 0 && 
+      !timeRestrictions.days.includes(currentDay)) {
     return false;
   }
-
+  
   // Check time
   if (timeRestrictions.startTime && timeRestrictions.endTime) {
     const currentTime = now.getHours() * 60 + now.getMinutes(); // Current time in minutes
-
-    // Parse start and end times
-    const startParts = timeRestrictions.startTime.split(":");
-    const endParts = timeRestrictions.endTime.split(":");
-
+    
+    // Parse start and end time
+    const startParts = timeRestrictions.startTime.split(':');
+    const endParts = timeRestrictions.endTime.split(':');
+    
     if (startParts.length === 2 && endParts.length === 2) {
       const startTime = parseInt(startParts[0]) * 60 + parseInt(startParts[1]);
       const endTime = parseInt(endParts[0]) * 60 + parseInt(endParts[1]);
-
+      
       // If current time is not in the interval, rule is inactive
       if (currentTime < startTime || currentTime > endTime) {
         return false;
       }
     }
   }
-
+  
   // If all checks pass, rule is active
   return true;
-}
+  */
+};
 
 module.exports = {
   getRules,

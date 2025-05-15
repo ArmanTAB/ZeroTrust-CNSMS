@@ -23,6 +23,8 @@ app = FastAPI(title="Zero Trust Security Management System")
 origins = [
     "http://localhost:3000",  # Frontend React
     "http://localhost:8000",  # Backend for development
+    "http://127.0.0.1:8000",  # Backend for development
+
 ]
 
 app.add_middleware(

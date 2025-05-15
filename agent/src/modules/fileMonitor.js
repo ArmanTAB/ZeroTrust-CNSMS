@@ -43,7 +43,7 @@ const isFileAccessBlocked = (filePath) => {
       rule.resources.files.length > 0
   );
 
-  // Check allow rules first (they have priority)
+  // First check allow rules (they have priority)
   const allowRules = activeRules.filter((rule) => rule.type === "allow");
   const blockRules = activeRules.filter((rule) => rule.type === "block");
 
@@ -77,38 +77,8 @@ const isFileAccessBlocked = (filePath) => {
     }
   }
 
-  // Default: don't block
+  // By default don't block
   return false;
-};
-
-// Find which rule is responsible for blocking/allowing a file
-const findRuleForFile = (filePath, type) => {
-  // First search in specific rules for this user
-  const userRules = rules.filter((r) => r.__userSpecific && r.type === type);
-  for (const rule of userRules) {
-    if (rule.resources && rule.resources.files) {
-      for (const p of rule.resources.files) {
-        const normalizedPath = path.normalize(p);
-        if (filePath.startsWith(normalizedPath)) {
-          return rule;
-        }
-      }
-    }
-  }
-
-  // Then search in all rules
-  for (const rule of rules) {
-    if (rule.type === type && rule.resources && rule.resources.files) {
-      for (const p of rule.resources.files) {
-        const normalizedPath = path.normalize(p);
-        if (filePath.startsWith(normalizedPath)) {
-          return rule;
-        }
-      }
-    }
-  }
-
-  return null;
 };
 
 // Create watcher for file/folder
@@ -192,6 +162,36 @@ const createWatcher = (dirPath) => {
   }
 };
 
+// Find which rule is responsible for blocking/allowing a file
+const findRuleForFile = (filePath, type) => {
+  // First search in specific rules for this user
+  const userRules = rules.filter((r) => r.__userSpecific && r.type === type);
+  for (const rule of userRules) {
+    if (rule.resources && rule.resources.files) {
+      for (const blockedPath of rule.resources.files) {
+        const normalizedBlockedPath = path.normalize(blockedPath);
+        if (filePath.startsWith(normalizedBlockedPath)) {
+          return rule;
+        }
+      }
+    }
+  }
+
+  // Then search in all rules
+  for (const rule of rules) {
+    if (rule.type === type && rule.resources && rule.resources.files) {
+      for (const blockedPath of rule.resources.files) {
+        const normalizedBlockedPath = path.normalize(blockedPath);
+        if (filePath.startsWith(normalizedBlockedPath)) {
+          return rule;
+        }
+      }
+    }
+  }
+
+  return null;
+};
+
 // Get list of critical directories
 const getCriticalDirectories = () => {
   const criticalDirs = new Set();
@@ -263,7 +263,7 @@ const watchCriticalDirectories = () => {
   logger.info(`Successfully watching ${watchedPaths.size} directories`);
 };
 
-// Start monitoring
+// Start monitor
 const start = () => {
   if (_isRunning) {
     logger.info("File monitoring is already running");
@@ -277,7 +277,7 @@ const start = () => {
   logger.info("File monitoring started");
 };
 
-// Stop monitoring
+// Stop monitor
 const stop = () => {
   return new Promise((resolve) => {
     if (!_isRunning) {
@@ -287,12 +287,12 @@ const stop = () => {
     }
 
     // Stop all watchers
-    for (const [dir, watcher] of watchedPaths.entries()) {
+    for (const [path, watcher] of watchedPaths.entries()) {
       try {
         watcher.close();
-        logger.debug(`Stopped watching: ${dir}`);
+        logger.debug(`Stopped watching: ${path}`);
       } catch (error) {
-        logger.warn(`Error closing watcher for ${dir}: ${error.message}`);
+        logger.warn(`Error closing watcher for ${path}: ${error.message}`);
       }
     }
 

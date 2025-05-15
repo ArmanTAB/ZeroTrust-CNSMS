@@ -1,4 +1,249 @@
-// src/main/main.js (continued)
+const { app, BrowserWindow, ipcMain, Menu, Tray, dialog } = require("electron");
+const path = require("path");
+const url = require("url");
+const fs = require("fs");
+const os = require("os");
+
+// Agent modules
+const logger = require("./logger");
+const auth = require("../modules/auth");
+const networkMonitor = require("../modules/networkMonitor");
+const processMonitor = require("../modules/processMonitor");
+const fileMonitor = require("../modules/fileMonitor");
+const ruleSync = require("../modules/ruleSync");
+
+// Global variables
+let mainWindow;
+let tray;
+let isQuitting = false;
+
+// Current user and authentication token
+let currentUser = null;
+let authToken = null;
+
+// Configuration
+const config = {
+  apiUrl: "http://127.0.0.1:8000/api", // Changed to IP address instead of localhost
+  logLevel: "info",
+  updateInterval: 5 * 60 * 1000, // 5 minutes
+  appName: "Access Control Agent",
+  mongoUri:
+    process.env.MONGODB_URI ||
+    "mongodb+srv://zt_admin:ZZteeGtWYMVPKNaq@cluster0.f2qts.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
+};
+
+// Cleanup previous session at startup
+const cleanupPreviousSession = async () => {
+  logger.info("Checking for and cleaning up previous session");
+
+  try {
+    // Check hosts file for our markers
+    const hostsPath = networkMonitor.getHostsPath();
+
+    if (fs.existsSync(hostsPath)) {
+      const hostsContent = fs.readFileSync(hostsPath, "utf8");
+
+      if (hostsContent.includes("# BEGIN ACCESS CONTROL AGENT BLOCK")) {
+        logger.warn("Found previous session blocking rules in hosts file");
+
+        // Remove our block
+        const cleanedContent = hostsContent.replace(
+          /# BEGIN ACCESS CONTROL AGENT BLOCK\n[\s\S]*?# END ACCESS CONTROL AGENT BLOCK\n/g,
+          ""
+        );
+
+        fs.writeFileSync(hostsPath, cleanedContent);
+        logger.info("Removed previous blocking rules from hosts file");
+
+        // Flush DNS cache
+        networkMonitor
+          .flushDNSCache()
+          .then(() => logger.info("DNS cache flushed after cleanup"))
+          .catch((err) =>
+            logger.warn(`Error flushing DNS cache: ${err.message}`)
+          );
+      }
+    }
+  } catch (error) {
+    logger.error(`Error during previous session cleanup: ${error.message}`);
+  }
+};
+
+// Create application window
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 900,
+    height: 700,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+    icon: path.join(__dirname, "../assets/icon.png"),
+    show: false, // Don't show window until it's ready
+    title: config.appName,
+  });
+
+  // Load HTML file
+  mainWindow.loadURL(
+    url.format({
+      pathname: path.join(__dirname, "../renderer/login.html"),
+      protocol: "file:",
+      slashes: true,
+    })
+  );
+
+  // Show window when fully loaded
+  mainWindow.once("ready-to-show", () => {
+    mainWindow.show();
+  });
+
+  // Prevent window closing (minimize to tray)
+  mainWindow.on("close", (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+      return false;
+    }
+    return true;
+  });
+
+  // Actions when window is fully closed
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+
+  // Create tray menu
+  createTray();
+}
+
+// Create tray icon
+function createTray() {
+  // Tray icon based on OS
+  const iconPath =
+    process.platform === "win32"
+      ? path.join(__dirname, "../assets/icon.ico")
+      : path.join(__dirname, "../assets/icon.png");
+
+  tray = new Tray(iconPath);
+
+  const updateTrayMenu = (isProtectionActive = false) => {
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: `${config.appName}`,
+        enabled: false,
+      },
+      { type: "separator" },
+      {
+        label: "Protection Status",
+        submenu: [
+          {
+            label: `Network Protection: ${
+              networkMonitor.isRunning() ? "Active" : "Inactive"
+            }`,
+            enabled: false,
+          },
+          {
+            label: `Process Protection: ${
+              processMonitor.isRunning() ? "Active" : "Inactive"
+            }`,
+            enabled: false,
+          },
+          {
+            label: `File Protection: ${
+              fileMonitor.isRunning() ? "Active" : "Inactive"
+            }`,
+            enabled: false,
+          },
+        ],
+      },
+      { type: "separator" },
+      {
+        label: isProtectionActive
+          ? "Disable Protection (Requires Login)"
+          : "Enable Protection (Requires Login)",
+        enabled: false,
+      },
+      { type: "separator" },
+      { label: "Show Dashboard", click: showMainWindow },
+      { type: "separator" },
+      { label: "Quit", click: quitApplication },
+    ]);
+
+    tray.setToolTip(
+      `${config.appName} - ${
+        isProtectionActive ? "Protection Active" : "Protection Inactive"
+      }`
+    );
+    tray.setContextMenu(contextMenu);
+  };
+
+  // Initialize tray menu
+  updateTrayMenu();
+
+  // Update tray menu every 10 seconds
+  setInterval(() => {
+    const isActive =
+      networkMonitor.isRunning() ||
+      processMonitor.isRunning() ||
+      fileMonitor.isRunning();
+    updateTrayMenu(isActive);
+  }, 10000);
+
+  // Show window when clicking on tray icon
+  tray.on("click", showMainWindow);
+}
+
+// Function to show main window
+function showMainWindow() {
+  if (mainWindow === null) {
+    createWindow();
+  } else {
+    if (!mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+    mainWindow.focus();
+  }
+}
+
+// Function to close application
+async function quitApplication() {
+  isQuitting = true;
+
+  try {
+    // If user is logged in, perform logout procedure
+    if (currentUser && authToken) {
+      logger.info("Application closing - performing logout cleanup");
+
+      await stopAllMonitors();
+    }
+
+    app.quit();
+  } catch (error) {
+    logger.error(`Error during application quit: ${error.message}`);
+    app.quit();
+  }
+}
+
+// Stop all monitors
+async function stopAllMonitors() {
+  try {
+    logger.info("Stopping all protection modules...");
+
+    // Stop all monitors
+    await Promise.all([
+      stopMonitorWithPromise(networkMonitor, "Network"),
+      stopMonitorWithPromise(processMonitor, "Process"),
+      stopMonitorWithPromise(fileMonitor, "File"),
+    ]);
+
+    logger.info("All protection modules stopped successfully");
+    return true;
+  } catch (error) {
+    logger.error(`Error stopping protection modules: ${error.message}`);
+    return false;
+  }
+}
+
 // Function to convert monitor stop to Promise
 function stopMonitorWithPromise(monitor, monitorName) {
   return new Promise((resolve, reject) => {
@@ -58,10 +303,16 @@ ipcMain.on("login", async (event, credentials) => {
   try {
     logger.info(`Login attempt: ${credentials.email}`);
 
-    // Initialize MongoDB connection (optional, auth module will handle this too)
-    await auth.connectToMongo(config.mongoUri);
+    // Try standard authentication first
+    let result = await auth.login(credentials, config.apiUrl);
 
-    const result = await auth.login(credentials, config.apiUrl);
+    // If standard authentication fails, try direct MongoDB authentication as fallback
+    if (!result.success) {
+      logger.info(
+        `API authentication failed, attempting direct MongoDB authentication`
+      );
+      result = await auth.authenticateDirectly(credentials, config.mongoUri);
+    }
 
     // In case of successful authentication, save token and user data
     if (result.success) {
@@ -274,8 +525,10 @@ async function performLogout(event) {
     currentUser = null;
     authToken = null;
 
-    // Disconnect from MongoDB
-    await auth.disconnectFromMongo();
+    // Disconnect from MongoDB if needed
+    if (auth.disconnectFromMongo) {
+      await auth.disconnectFromMongo();
+    }
 
     // Load login page
     if (mainWindow) {
@@ -358,7 +611,9 @@ ipcMain.on("get-recent-activities", (event) => {
 ipcMain.on("check-url", (event, url) => {
   try {
     const domain = networkMonitor.extractDomain(url);
-    const isBlocked = networkMonitor.isDomainBlocked(domain);
+    const isBlocked = networkMonitor.isDomainBlocked
+      ? networkMonitor.isDomainBlocked(domain)
+      : false;
     const rule = isBlocked
       ? networkMonitor.findRuleForDomain(domain, "block")
       : null;
@@ -380,7 +635,9 @@ ipcMain.on("check-url", (event, url) => {
 // Handle getting blocking rules
 ipcMain.on("get-blocking-rules", (event) => {
   try {
-    const blockRules = networkMonitor.getBlockRules();
+    const blockRules = networkMonitor.getBlockRules
+      ? networkMonitor.getBlockRules()
+      : [];
     event.reply("blocking-rules", blockRules);
   } catch (error) {
     event.reply("blocking-rules", []);

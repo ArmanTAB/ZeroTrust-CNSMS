@@ -1,6 +1,4 @@
-// src/modules/fileMonitor.js
-const fs = require("fs");
-const path = require("path");
+const { exec } = require("child_process");
 const os = require("os");
 const logger = require("../main/logger");
 const ruleSync = require("./ruleSync");
@@ -9,42 +7,93 @@ const ruleSync = require("./ruleSync");
 let _isRunning = false;
 let rules = [];
 let recentActivities = [];
-let watchedPaths = new Map(); // Path -> watcher
+let monitorInterval;
 let currentUser = null;
 const MAX_ACTIVITIES = 100;
+const CHECK_INTERVAL = 5000; // Check every 5 seconds
 
-// Initialize file system monitor
+// Initialize process monitor
 const init = async (userRules, user) => {
   try {
     rules = userRules || [];
     recentActivities = [];
     currentUser = user;
 
-    logger.info("File monitor initialized");
+    logger.info("Process monitor initialized");
     return true;
   } catch (error) {
-    logger.error(`Error initializing file monitor: ${error.message}`);
+    logger.error(`Error initializing process monitor: ${error.message}`);
     return false;
   }
 };
 
-// Check if file/folder access is blocked
-const isFileAccessBlocked = (filePath) => {
-  if (!filePath) return false;
+// Get list of running processes
+const getRunningProcesses = () => {
+  return new Promise((resolve, reject) => {
+    let command = "";
 
-  // Normalize path
-  const normalizedPath = path.normalize(filePath);
+    // Command depends on OS
+    if (process.platform === "win32") {
+      command = "tasklist /fo csv /nh";
+    } else if (process.platform === "darwin") {
+      command = "ps -axo comm";
+    } else {
+      command = "ps -A -o comm";
+    }
+
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      // Parse output depending on OS
+      let processes = [];
+
+      if (process.platform === "win32") {
+        // Parsing for Windows
+        const lines = stdout.split("\n");
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+
+          // Remove quotes and split by commas
+          const parts = line.split('","');
+          if (parts.length >= 1) {
+            const name = parts[0].replace('"', "");
+            processes.push({ name });
+          }
+        }
+      } else {
+        // Parsing for Unix-like systems
+        const lines = stdout.split("\n");
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+
+          processes.push({ name: line });
+        }
+      }
+
+      resolve(processes);
+    });
+  });
+};
+
+// Check if process is blocked
+const isProcessBlocked = (processName) => {
+  if (!processName) return false;
 
   // Filter rules, applying time restrictions
   const activeRules = rules.filter(
     (rule) =>
       ruleSync.isRuleActive(rule) &&
       rule.resources &&
-      rule.resources.files &&
-      rule.resources.files.length > 0
+      rule.resources.applications &&
+      rule.resources.applications.length > 0
   );
 
-  // Check allow rules first (they have priority)
+  // First check allow rules (they have priority)
   const allowRules = activeRules.filter((rule) => rule.type === "allow");
   const blockRules = activeRules.filter((rule) => rule.type === "block");
 
@@ -52,45 +101,79 @@ const isFileAccessBlocked = (filePath) => {
   allowRules.sort((a, b) => b.priority - a.priority);
   blockRules.sort((a, b) => b.priority - a.priority);
 
-  // Check if file/folder is explicitly allowed
+  // Check if application is explicitly allowed
   for (const rule of allowRules) {
-    for (const allowedPath of rule.resources.files) {
-      const normalizedAllowedPath = path.normalize(allowedPath);
-
-      // If path starts with allowed path, access is allowed
-      if (normalizedPath.startsWith(normalizedAllowedPath)) {
-        logger.debug(`File access allowed by rule "${rule.name}": ${filePath}`);
+    for (const allowedApp of rule.resources.applications) {
+      if (processMatchesPattern(processName, allowedApp)) {
+        logger.debug(`Process ${processName} allowed by rule "${rule.name}"`);
         return false;
       }
     }
   }
 
-  // Check if file/folder is blocked
+  // Check if application is blocked
   for (const rule of blockRules) {
-    for (const blockedPath of rule.resources.files) {
-      const normalizedBlockedPath = path.normalize(blockedPath);
-
-      // If path starts with blocked path, access is blocked
-      if (normalizedPath.startsWith(normalizedBlockedPath)) {
-        logger.debug(`File access blocked by rule "${rule.name}": ${filePath}`);
+    for (const blockedApp of rule.resources.applications) {
+      if (processMatchesPattern(processName, blockedApp)) {
+        logger.debug(`Process ${processName} blocked by rule "${rule.name}"`);
         return true;
       }
     }
   }
 
-  // Default: don't block
+  // By default don't block
   return false;
 };
 
-// Find which rule is responsible for blocking/allowing a file
-const findRuleForFile = (filePath, type) => {
+// Check if process matches pattern
+const processMatchesPattern = (processName, pattern) => {
+  // Convert names to lowercase for case-insensitive comparison
+  const processLower = processName.toLowerCase();
+  const patternLower = pattern.toLowerCase();
+
+  // Check if pattern is contained in process name
+  // or if process name matches pattern
+  return (
+    processLower.includes(patternLower) ||
+    (patternLower.endsWith(".exe") && processLower === patternLower)
+  );
+};
+
+// Terminate process
+const killProcess = (processName) => {
+  return new Promise((resolve, reject) => {
+    let command = "";
+
+    // Command depends on OS
+    if (process.platform === "win32") {
+      command = `taskkill /F /IM "${processName}" /T`;
+    } else if (process.platform === "darwin") {
+      command = `pkill -f "${processName}"`;
+    } else {
+      command = `pkill -f "${processName}"`;
+    }
+
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        logger.error(`Failed to kill process ${processName}: ${error.message}`);
+        reject(error);
+        return;
+      }
+
+      logger.info(`Process ${processName} terminated`);
+      resolve(true);
+    });
+  });
+};
+
+// Find which rule is responsible for blocking/allowing a process
+const findRuleForProcess = (processName, type) => {
   // First search in specific rules for this user
   const userRules = rules.filter((r) => r.__userSpecific && r.type === type);
   for (const rule of userRules) {
-    if (rule.resources && rule.resources.files) {
-      for (const p of rule.resources.files) {
-        const normalizedPath = path.normalize(p);
-        if (filePath.startsWith(normalizedPath)) {
+    if (rule.resources && rule.resources.applications) {
+      for (const app of rule.resources.applications) {
+        if (processMatchesPattern(processName, app)) {
           return rule;
         }
       }
@@ -99,10 +182,9 @@ const findRuleForFile = (filePath, type) => {
 
   // Then search in all rules
   for (const rule of rules) {
-    if (rule.type === type && rule.resources && rule.resources.files) {
-      for (const p of rule.resources.files) {
-        const normalizedPath = path.normalize(p);
-        if (filePath.startsWith(normalizedPath)) {
+    if (rule.type === type && rule.resources && rule.resources.applications) {
+      for (const app of rule.resources.applications) {
+        if (processMatchesPattern(processName, app)) {
           return rule;
         }
       }
@@ -112,204 +194,115 @@ const findRuleForFile = (filePath, type) => {
   return null;
 };
 
-// Create watcher for file/folder
-const createWatcher = (dirPath) => {
+// Check running processes
+const checkProcesses = async () => {
+  if (!_isRunning) return;
+
   try {
-    // Check if path exists
-    if (!fs.existsSync(dirPath)) {
-      logger.warn(`Path does not exist: ${dirPath}`);
-      return null;
-    }
+    const processes = await getRunningProcesses();
+    logger.debug(`Checking ${processes.length} running processes`);
 
-    // Check if path is a directory
-    const stats = fs.statSync(dirPath);
-    if (!stats.isDirectory()) {
-      logger.warn(`Path is not a directory: ${dirPath}`);
-      return null;
-    }
+    // Log both allowed and blocked activities
+    for (const process of processes) {
+      // Check against block rules first
+      const isBlocked = isProcessBlocked(process.name);
 
-    logger.debug(`Starting file watcher for directory: ${dirPath}`);
+      if (isBlocked) {
+        // Find which rule blocked this process
+        const blockingRule = findRuleForProcess(process.name, "block");
+        const ruleName = blockingRule
+          ? blockingRule.ruleName || blockingRule.name
+          : "Default rule";
 
-    // Create watcher
-    const watcher = fs.watch(
-      dirPath,
-      { recursive: true },
-      (eventType, filename) => {
-        if (!filename || !_isRunning) return;
+        // Log and terminate blocked process
+        logger.info(
+          `Blocked process detected: ${process.name} by rule: ${ruleName}`
+        );
 
-        const fullPath = path.join(dirPath, filename);
-        logger.debug(`File event detected: ${eventType} - ${fullPath}`);
+        // Add activity
+        addActivity({
+          timestamp: new Date(),
+          type: "process",
+          resource: process.name,
+          blocked: true,
+          ruleName: ruleName,
+          description: `Blocked and terminated process: ${process.name} (${ruleName})`,
+        });
 
-        // Check for both allow and block rules
-        const isBlocked = isFileAccessBlocked(fullPath);
-
-        if (isBlocked) {
-          // Find which rule blocked this file
-          const blockingRule = findRuleForFile(fullPath, "block");
-          const ruleName = blockingRule
-            ? blockingRule.ruleName || blockingRule.name
-            : "Default rule";
-
-          // Log blocked access
-          logger.info(
-            `Blocked file access detected: ${fullPath} by rule: ${ruleName}`
+        // Terminate process
+        try {
+          await killProcess(process.name);
+        } catch (killError) {
+          logger.error(
+            `Error terminating process ${process.name}: ${killError.message}`
           );
+        }
+      } else {
+        // Check if there's an explicit allow rule for this process
+        const allowRule = findRuleForProcess(process.name, "allow");
 
-          // Add activity
+        if (allowRule) {
+          // Log allowed process activity
           addActivity({
             timestamp: new Date(),
-            type: "file",
-            resource: fullPath,
-            blocked: true,
-            ruleName: ruleName,
-            description: `Blocked file access: ${fullPath} (${ruleName})`,
+            type: "process",
+            resource: process.name,
+            blocked: false,
+            ruleName: allowRule.ruleName || allowRule.name,
+            description: `Allowed process: ${process.name} (${
+              allowRule.ruleName || allowRule.name
+            })`,
           });
-        } else {
-          // Check if there's an explicit allow rule for this file
-          const allowRule = findRuleForFile(fullPath, "allow");
-
-          if (allowRule) {
-            // Log allowed file activity
-            addActivity({
-              timestamp: new Date(),
-              type: "file",
-              resource: fullPath,
-              blocked: false,
-              ruleName: allowRule.ruleName || allowRule.name,
-              description: `Allowed file access: ${fullPath} (${
-                allowRule.ruleName || allowRule.name
-              })`,
-            });
-          }
         }
       }
-    );
-
-    logger.info(`Watching directory: ${dirPath}`);
-    return watcher;
+    }
   } catch (error) {
-    logger.error(`Error watching directory ${dirPath}: ${error.message}`);
-    return null;
+    logger.error(`Error checking processes: ${error.message}`);
   }
 };
 
-// Get list of critical directories
-const getCriticalDirectories = () => {
-  const criticalDirs = new Set();
-
-  // Add directories from rules
-  for (const rule of rules) {
-    if (rule.resources && rule.resources.files) {
-      for (const filePath of rule.resources.files) {
-        // If it's an existing directory, add it
-        try {
-          if (fs.existsSync(filePath)) {
-            const stats = fs.statSync(filePath);
-            if (stats.isDirectory()) {
-              criticalDirs.add(filePath);
-            } else {
-              // If it's a file, add its directory
-              criticalDirs.add(path.dirname(filePath));
-            }
-          } else {
-            // If path doesn't exist, add its directory
-            criticalDirs.add(path.dirname(filePath));
-          }
-        } catch (error) {
-          logger.warn(`Error checking path ${filePath}: ${error.message}`);
-        }
-      }
-    }
-  }
-
-  // Add common critical directories
-  if (process.platform === "win32") {
-    criticalDirs.add("C:\\Windows");
-    criticalDirs.add("C:\\Program Files");
-    criticalDirs.add("C:\\Program Files (x86)");
-    criticalDirs.add(process.env.USERPROFILE || "C:\\Users\\Default");
-    criticalDirs.add(
-      process.env.APPDATA ||
-        path.join(
-          process.env.USERPROFILE || "C:\\Users\\Default",
-          "AppData",
-          "Roaming"
-        )
-    );
-  } else {
-    criticalDirs.add("/etc");
-    criticalDirs.add("/var");
-    criticalDirs.add("/usr");
-    criticalDirs.add(process.env.HOME || "/home");
-    criticalDirs.add("/opt");
-  }
-
-  return Array.from(criticalDirs);
-};
-
-// Start monitoring critical directories
-const watchCriticalDirectories = () => {
-  const criticalDirs = getCriticalDirectories();
-
-  logger.info(`Starting to watch ${criticalDirs.length} critical directories`);
-
-  // Create watchers for each directory
-  for (const dir of criticalDirs) {
-    const watcher = createWatcher(dir);
-    if (watcher) {
-      watchedPaths.set(dir, watcher);
-    }
-  }
-
-  logger.info(`Successfully watching ${watchedPaths.size} directories`);
-};
-
-// Start monitoring
+// Start monitor
 const start = () => {
   if (_isRunning) {
-    logger.info("File monitoring is already running");
+    logger.info("Process monitoring is already running");
     return;
   }
 
-  // Start watching critical directories
-  watchCriticalDirectories();
+  // Start periodic process checking
+  monitorInterval = setInterval(checkProcesses, CHECK_INTERVAL);
 
   _isRunning = true;
-  logger.info("File monitoring started");
+  logger.info("Process monitoring started");
+
+  // Immediately perform first check
+  checkProcesses();
 };
 
-// Stop monitoring
+// Stop monitor
 const stop = () => {
   return new Promise((resolve) => {
     if (!_isRunning) {
-      logger.info("File monitoring is not running");
+      logger.info("Process monitoring is not running");
       resolve(true);
       return;
     }
 
-    // Stop all watchers
-    for (const [dir, watcher] of watchedPaths.entries()) {
-      try {
-        watcher.close();
-        logger.debug(`Stopped watching: ${dir}`);
-      } catch (error) {
-        logger.warn(`Error closing watcher for ${dir}: ${error.message}`);
-      }
+    // Stop periodic checking
+    if (monitorInterval) {
+      clearInterval(monitorInterval);
+      monitorInterval = null;
     }
 
-    // Clear watchers map
-    watchedPaths.clear();
-
     _isRunning = false;
-    logger.info("File monitoring stopped");
+    logger.info("Process monitoring stopped");
 
     // Add activity about stopping monitoring
     addActivity({
       timestamp: new Date(),
-      type: "file",
-      resource: "all files",
+      type: "process",
+      resource: "all processes",
       blocked: false,
-      description: "File monitoring disabled",
+      description: "Process monitoring disabled",
     });
 
     resolve(true);
@@ -318,26 +311,14 @@ const stop = () => {
 
 // Update rules
 const updateRules = (newRules, user) => {
-  const wasRunning = _isRunning;
+  rules = newRules || [];
 
   // Update current user if provided
   if (user) {
     currentUser = user;
   }
 
-  // If monitor is running, stop it before updating rules
-  if (wasRunning) {
-    stop().then(() => {
-      rules = newRules || [];
-      logger.info(`File monitor rules updated: ${rules.length} rules`);
-
-      // Restart monitor with new rules
-      start();
-    });
-  } else {
-    rules = newRules || [];
-    logger.info(`File monitor rules updated: ${rules.length} rules`);
-  }
+  logger.info(`Process monitor rules updated: ${rules.length} rules`);
 };
 
 // Add activity to history
