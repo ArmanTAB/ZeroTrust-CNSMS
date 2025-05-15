@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zero Trust Agent - Login</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      color: #333;
+    }
+    .login-container {
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      padding: 30px;
+      width: 400px;
+      max-width: 90%;
+    }
+    .logo {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .logo img {
+      width: 80px;
+      height: auto;
+    }
+    h1 {
+      color: #2c3e50;
+      margin-top: 0;
+      margin-bottom: 20px;
+      text-align: center;
+      font-weight: 600;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #555;
+      font-weight: 500;
+    }
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+    input:focus {
+      border-color: #3498db;
+      outline: none;
+    }
+    button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      padding: 14px;
+      width: 100%;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-top: 10px;
+      transition: background-color 0.3s;
+      font-weight: 500;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    button:disabled {
+      background-color: #95a5a6;
+      cursor: not-allowed;
+    }
+    .error-message {
+      color: #e74c3c;
+      margin-top: 15px;
+      text-align: center;
+      font-size: 14px;
+    }
+    .info {
+      margin-top: 15px;
+      text-align: center;
+      color: #7f8c8d;
+      font-size: 14px;
+    }
+    .loading {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 10px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .system-status {
+      margin-top: 20px;
+      padding-top: 15px;
+      border-top: 1px solid #eee;
+      font-size: 13px;
+    }
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    .status-label {
+      color: #7f8c8d;
+    }
+    .status-value {
+      font-weight: 500;
+    }
+    .status-ok {
+      color: #27ae60;
+    }
+    .status-error {
+      color: #e74c3c;
+    }
+    .server-config {
+      margin-top: 20px;
+      text-align: left;
+      font-size: 13px;
+    }
+    .server-url {
+      font-weight: 500;
+      color: #2c3e50;
+    }
+    .shake {
+      animation: shake 0.5s;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+      20%, 40%, 60%, 80% { transform: translateX(5px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="logo">
+      <img src="../assets/logo.png" alt="Zero Trust Agent Logo" id="logo-img" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3QgZmlsbD0iIzM0OThkYiIgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIHJ4PSIxMCIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik03MSA1MEw3MSA3MEgzMUwzMSA1MEw1MSA1MEw1MSAzMEw3MSAzMEw3MSA1MFoiLz48Y2lyY2xlIGZpbGw9IiNmZmYiIGN4PSI0MCIgY3k9IjQwIiByPSIxMCIvPjwvc3ZnPg=='">
+    </div>
+    <h1>Zero Trust Agent</h1>
+    <form id="login-form">
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="Enter your email" required>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="Enter your password" required>
+      </div>
+      <div id="error-message" class="error-message"></div>
+      <button type="submit" id="login-button">Sign In</button>
+    </form>
+    <div class="info">
+      Please enter your CNSMS credentials to activate protection
+    </div>
+    
+    <div class="system-status">
+      <div class="status-item">
+        <span class="status-label">System:</span>
+        <span class="status-value status-ok" id="system-status">Ready</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Version:</span>
+        <span class="status-value" id="version-number">1.0.0</span>
+      </div>
+    </div>
+    
+    <div class="server-config">
+      <div class="status-item">
+        <span class="status-label">Server:</span>
+        <span class="status-value server-url" id="server-url">http://localhost:8000</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    // Form elements
+    const loginForm = document.getElementById('login-form');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const errorMessage = document.getElementById('error-message');
+    const loginButton = document.getElementById('login-button');
+    const systemStatus = document.getElementById('system-status');
+    const serverUrl = document.getElementById('server-url');
+    
+    // Check system status
+    function checkSystemStatus() {
+      // Here you could add real system check
+      // For example, check connection to server
+      
+      // For demonstration, set status to "Ready"
+      systemStatus.textContent = 'Ready';
+      systemStatus.className = 'status-value status-ok';
+      
+      // Get server URL from config
+      try {
+        const { remote } = require('electron');
+        const config = remote.require('./main').config;
+        if (config && config.apiUrl) {
+          serverUrl.textContent = config.apiUrl.replace('/api', '');
+        }
+      } catch(e) {
+        console.error('Error getting server URL:', e);
+      }
+    }
+    
+    // Loading indicator function
+    function setLoading(isLoading) {
+      if (isLoading) {
+        loginButton.disabled = true;
+        loginButton.innerHTML = '<span class="loading"></span> Signing In...';
+      } else {
+        loginButton.disabled = false;
+        loginButton.textContent = 'Sign In';
+      }
+    }
+    
+    // Form submission handler
+    loginForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+      
+      // Clear error message
+      errorMessage.textContent = '';
+      
+      // Show loading state
+      setLoading(true);
+      
+      // Send login data to main process
+      ipcRenderer.send('login', { email, password });
+    });
+    
+    // Login response handler
+    ipcRenderer.on('login-response', (event, response) => {
+      // Hide loading state
+      setLoading(false);
+      
+      if (!response.success) {
+        errorMessage.textContent = response.error || 'Login failed';
+        
+        // Shake form on error
+        loginForm.classList.add('shake');
+        setTimeout(() => {
+          loginForm.classList.remove('shake');
+        }, 500);
+      }
+    });
+    
+    // Page load handler
+    window.addEventListener('DOMContentLoaded', () => {
+      // Check system status
+      checkSystemStatus();
+      
+      // Focus on email field
+      emailInput.focus();
+    });
+  </script>
+</body>
+</html>
