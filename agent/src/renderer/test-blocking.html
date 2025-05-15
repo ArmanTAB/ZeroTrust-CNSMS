@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zero Trust Agent - Test Blocking</title>
+  <style>
+    :root {
+      --primary-color: #3498db;
+      --primary-dark: #2980b9;
+      --success-color: #2ecc71;
+      --warning-color: #f39c12;
+      --danger-color: #e74c3c;
+      --gray-light: #f5f5f5;
+      --gray: #95a5a6;
+      --dark: #2c3e50;
+      --shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    body {
+      font-family: var(--font-family);
+      background-color: var(--gray-light);
+      margin: 0;
+      padding: 0;
+      color: #333;
+    }
+    
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .logo {
+      display: flex;
+      align-items: center;
+    }
+    
+    .logo img {
+      width: 36px;
+      height: auto;
+      margin-right: 10px;
+    }
+    
+    .logo h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      color: var(--dark);
+    }
+    
+    .back-link {
+      color: var(--primary-color);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      transition: color 0.3s;
+    }
+    
+    .back-link:hover {
+      color: var(--primary-dark);
+    }
+    
+    .test-section {
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .section-title {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--dark);
+      margin-top: 0;
+      margin-bottom: 15px;
+      border-bottom: 1px solid #f0f0f0;
+      padding-bottom: 10px;
+    }
+    
+    .test-form {
+      display: flex;
+      margin-bottom: 15px;
+    }
+    
+    .test-form input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px 0 0 4px;
+      font-family: var(--font-family);
+      font-size: 0.9rem;
+    }
+    
+    .test-form button, .action-button {
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 0 4px 4px 0;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: background-color 0.3s;
+    }
+    
+    .standalone-button {
+      border-radius: 4px;
+      padding: 10px 15px;
+      margin-bottom: 15px;
+    }
+    
+    .test-form button:hover, .action-button:hover {
+      background-color: var(--primary-dark);
+    }
+    
+    .result-container {
+      background-color: #f9f9f9;
+      border-radius: 4px;
+      padding: 15px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    
+    .loading {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 8px;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .footer {
+      margin-top: 20px;
+      text-align: center;
+      color: var(--gray);
+      font-size: 0.8rem;
+    }
+    
+    .success {
+      color: var(--success-color);
+    }
+    
+    .warning {
+      color: var(--warning-color);
+    }
+    
+    .error {
+      color: var(--danger-color);
+    }
+    
+    .rule-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 10px;
+      margin-top: 15px;
+    }
+    
+    .rule-card {
+      background-color: #f9f9f9;
+      border-radius: 4px;
+      padding: 10px;
+      border-left: 4px solid var(--primary-color);
+    }
+    
+    .rule-card.block-rule {
+      border-left-color: var(--danger-color);
+    }
+    
+    .rule-card.allow-rule {
+      border-left-color: var(--success-color);
+    }
+    
+    .rule-title {
+      font-weight: bold;
+      font-size: 0.9rem;
+      margin-bottom: 5px;
+    }
+    
+    .rule-resources {
+      font-size: 0.85rem;
+      color: var(--gray);
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <img src="../assets/logo.png" alt="Logo" id="logo-img" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3QgZmlsbD0iIzM0OThkYiIgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIHJ4PSIxMCIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik03MSA1MEw3MSA3MEgzMUwzMSA1MEw1MSA1MEw1MSAzMEw3MSAzMEw3MSA1MFoiLz48Y2lyY2xlIGZpbGw9IiNmZmYiIGN4PSI0MSIgY3k9IjQwIiByPSIxMCIvPjwvc3ZnPg=='">
+        <h1>Test Blocking Tools</h1>
+      </div>
+      <a href="dashboard.html" class="back-link">
+        ← Back to Dashboard
+      </a>
+    </header>
+    
+    <div class="test-section">
+      <h2 class="section-title">1. Test URL Blocking</h2>
+      <p>Enter a URL to check if it would be blocked based on your security policies:</p>
+      <div class="test-form">
+        <input type="text" id="url-input" placeholder="Enter a URL (e.g., facebook.com, instagram.com)" value="facebook.com">
+        <button id="check-url-button">Check URL</button>
+      </div>
+      <div id="url-result" class="result-container">Results will appear here...</div>
+    </div>
+    
+    <div class="test-section">
+      <h2 class="section-title">2. Test Application Blocking</h2>
+      <p>Enter an application name to check if it would be blocked:</p>
+      <div class="test-form">
+        <input type="text" id="app-input" placeholder="Enter application name (e.g., notepad.exe, chrome.exe)" value="notepad.exe">
+        <button id="check-app-button">Check Application</button>
+      </div>
+      <div id="app-result" class="result-container">Results will appear here...</div>
+    </div>
+    
+    <div class="test-section">
+      <h2 class="section-title">3. Test File Path Blocking</h2>
+      <p>Enter a file path to check if access would be blocked:</p>
+      <div class="test-form">
+        <input type="text" id="file-input" placeholder="Enter file path (e.g., C:\Users\Documents\test.txt)" value="C:\Users\Documents\confidential.txt">
+        <button id="check-file-button">Check File Path</button>
+      </div>
+      <div id="file-result" class="result-container">Results will appear here...</div>
+    </div>
+    
+    <div class="test-section">
+      <h2 class="section-title">4. Currently Active Rules</h2>
+      <button id="show-rules-button" class="action-button standalone-button">Show Active Rules</button>
+      <div id="rules-result" class="result-container">Click the button to view active rules...</div>
+    </div>
+    
+    <div class="test-section">
+      <h2 class="section-title">5. Hosts File Check</h2>
+      <p>Check if website blocking is properly configured in your hosts file:</p>
+      <button id="check-hosts-button" class="action-button standalone-button">Check Hosts File</button>
+      <div id="hosts-result" class="result-container">Click the button to check your hosts file configuration...</div>
+    </div>
+    
+    <div class="footer">
+      <p>Zero Trust Security Agent &copy; 2025 | Testing Tools</p>
+    </div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    // DOM elements
+    const urlInput = document.getElementById('url-input');
+    const checkUrlButton = document.getElementById('check-url-button');
+    const urlResult = document.getElementById('url-result');
+    
+    const appInput = document.getElementById('app-input');
+    const checkAppButton = document.getElementById('check-app-button');
+    const appResult = document.getElementById('app-result');
+    
+    const fileInput = document.getElementById('file-input');
+    const checkFileButton = document.getElementById('check-file-button');
+    const fileResult = document.getElementById('file-result');
+    
+    const showRulesButton = document.getElementById('show-rules-button');
+    const rulesResult = document.getElementById('rules-result');
+    
+    const checkHostsButton = document.getElementById('check-hosts-button');
+    const hostsResult = document.getElementById('hosts-result');
+    
+    // Test URL blocking
+    checkUrlButton.addEventListener('click', () => {
+      const url = urlInput.value.trim();
+      if (!url) {
+        urlResult.innerHTML = '<span class="error">Please enter a URL to check</span>';
+        return;
+      }
+      
+      urlResult.textContent = 'Checking URL...';
+      ipcRenderer.send('check-url', url);
+    });
+    
+    // Test application blocking
+    checkAppButton.addEventListener('click', () => {
+      const app = appInput.value.trim();
+      if (!app) {
+        appResult.innerHTML = '<span class="error">Please enter an application name to check</span>';
+        return;
+      }
+      
+      appResult.textContent = 'Checking application...';
+      ipcRenderer.send('check-application', app);
+    });
+    
+    // Test file path blocking
+    checkFileButton.addEventListener('click', () => {
+      const file = fileInput.value.trim();
+      if (!file) {
+        fileResult.innerHTML = '<span class="error">Please enter a file path to check</span>';
+        return;
+      }
+      
+      fileResult.textContent = 'Checking file path...';
+      ipcRenderer.send('check-file', file);
+    });
+    
+    // Show active rules
+    showRulesButton.addEventListener('click', () => {
+      rulesResult.textContent = 'Loading active rules...';
+      ipcRenderer.send('get-active-rules');
+    });
+    
+    // Check hosts file
+    checkHostsButton.addEventListener('click', () => {
+      hostsResult.textContent = 'Checking hosts file...';
+      ipcRenderer.send('check-hosts-file');
+    });
+    
+    // Handle IPC responses
+    ipcRenderer.on('url-check-result', (event, result) => {
+      let html = '';
+      
+      if (result.blocked) {
+        html += `<div class="error">URL <strong>${result.url}</strong> would be blocked</div>`;
+        html += `<div>Domain: ${result.domain}</div>`;
+        html += `<div>Blocking rule: ${result.ruleName || 'Unknown rule'}</div>`;
+        html += `<div>Rule type: ${result.ruleType || 'block'}</div>`;
+      } else {
+        html += `<div class="success">URL <strong>${result.url}</strong> would be allowed</div>`;
+        html += `<div>Domain: ${result.domain}</div>`;
+        
+        if (result.ruleName) {
+          html += `<div>Allowed by rule: ${result.ruleName}</div>`;
+          html += `<div>Rule type: ${result.ruleType || 'allow'}</div>`;
+        } else {
+          html += `<div class="warning">No specific rule found for this URL.</div>`;
+        }
+      }
+      
+      urlResult.innerHTML = html;
+    });
+    
+    ipcRenderer.on('app-check-result', (event, result) => {
+      let html = '';
+      
+      if (result.blocked) {
+        html += `<div class="error">Application <strong>${result.application}</strong> would be blocked</div>`;
+        html += `<div>Blocking rule: ${result.ruleName || 'Unknown rule'}</div>`;
+        html += `<div>Rule type: ${result.ruleType || 'block'}</div>`;
+      } else {
+        html += `<div class="success">Application <strong>${result.application}</strong> would be allowed</div>`;
+        
+        if (result.ruleName) {
+          html += `<div>Allowed by rule: ${result.ruleName}</div>`;
+          html += `<div>Rule type: ${result.ruleType || 'allow'}</div>`;
+        } else {
+          html += `<div class="warning">No specific rule found for this application.</div>`;
+        }
+      }
+      
+      appResult.innerHTML = html;
+    });
+    
+    ipcRenderer.on('file-check-result', (event, result) => {
+      let html = '';
+      
+      if (result.blocked) {
+        html += `<div class="error">File path <strong>${result.filePath}</strong> would be blocked</div>`;
+        html += `<div>Blocking rule: ${result.ruleName || 'Unknown rule'}</div>`;
+        html += `<div>Rule type: ${result.ruleType || 'block'}</div>`;
+      } else {
+        html += `<div class="success">File path <strong>${result.filePath}</strong> would be allowed</div>`;
+        
+        if (result.ruleName) {
+          html += `<div>Allowed by rule: ${result.ruleName}</div>`;
+          html += `<div>Rule type: ${result.ruleType || 'allow'}</div>`;
+        } else {
+          html += `<div class="warning">No specific rule found for this file path.</div>`;
+        }
+      }
+      
+      fileResult.innerHTML = html;
+    });
+    
+    ipcRenderer.on('active-rules', (event, rules) => {
+      if (!rules || rules.length === 0) {
+        rulesResult.innerHTML = '<div class="warning">No active rules found.</div>';
+        return;
+      }
+      
+      let html = `<div>Found ${rules.length} active rules:</div><div class="rule-grid">`;
+      
+      // Group rules by type
+      const blockRules = rules.filter(rule => rule.type === 'block');
+      const allowRules = rules.filter(rule => rule.type === 'allow');
+      
+      // Add block rules
+      blockRules.forEach(rule => {
+        let resourceText = '';
+        
+        if (rule.resources) {
+          if (rule.resources.websites && rule.resources.websites.length > 0) {
+            resourceText += `Websites: ${rule.resources.websites.slice(0, 3).join(', ')}`;
+            if (rule.resources.websites.length > 3) {
+              resourceText += ` and ${rule.resources.websites.length - 3} more...`;
+            }
+            resourceText += '<br>';
+          }
+          
+          if (rule.resources.applications && rule.resources.applications.length > 0) {
+            resourceText += `Apps: ${rule.resources.applications.slice(0, 3).join(', ')}`;
+            if (rule.resources.applications.length > 3) {
+              resourceText += ` and ${rule.resources.applications.length - 3} more...`;
+            }
+            resourceText += '<br>';
+          }
+          
+          if (rule.resources.files && rule.resources.files.length > 0) {
+            resourceText += `Files: ${rule.resources.files.slice(0, 2).join(', ')}`;
+            if (rule.resources.files.length > 2) {
+              resourceText += ` and ${rule.resources.files.length - 2} more...`;
+            }
+          }
+        }
+        
+        html += `
+          <div class="rule-card block-rule">
+            <div class="rule-title">${rule.name} (BLOCK)</div>
+            <div class="rule-resources">${resourceText}</div>
+          </div>
+        `;
+      });
+      
+      // Add allow rules
+      allowRules.forEach(rule => {
+        let resourceText = '';
+        
+        if (rule.resources) {
+          if (rule.resources.websites && rule.resources.websites.length > 0) {
+            resourceText += `Websites: ${rule.resources.websites.slice(0, 3).join(', ')}`;
+            if (rule.resources.websites.length > 3) {
+              resourceText += ` and ${rule.resources.websites.length - 3} more...`;
+            }
+            resourceText += '<br>';
+          }
+          
+          if (rule.resources.applications && rule.resources.applications.length > 0) {
+            resourceText += `Apps: ${rule.resources.applications.slice(0, 3).join(', ')}`;
+            if (rule.resources.applications.length > 3) {
+              resourceText += ` and ${rule.resources.applications.length - 3} more...`;
+            }
+            resourceText += '<br>';
+          }
+          
+          if (rule.resources.files && rule.resources.files.length > 0) {
+            resourceText += `Files: ${rule.resources.files.slice(0, 2).join(', ')}`;
+            if (rule.resources.files.length > 2) {
+              resourceText += ` and ${rule.resources.files.length - 2} more...`;
+            }
+          }
+        }
+        
+        html += `
+          <div class="rule-card allow-rule">
+            <div class="rule-title">${rule.name} (ALLOW)</div>
+            <div class="rule-resources">${resourceText}</div>
+          </div>
+        `;
+      });
+      
+      html += '</div>';
+      rulesResult.innerHTML = html;
+    });
+    
+    ipcRenderer.on('hosts-check-result', (event, result) => {
+      let html = '';
+      
+      if (result.success) {
+        html += `<div class="success">Hosts file check successful</div>`;
+        html += `<div>Hosts file location: ${result.hostsPath}</div>`;
+        html += `<div>Blocked domains count: ${result.blockedDomains?.length || 0}</div>`;
+        
+        if (result.blockedDomains && result.blockedDomains.length > 0) {
+          html += `<div>Blocked domains:<br>${result.blockedDomains.join('<br>')}</div>`;
+        } else {
+          html += `<div class="warning">No domains are currently being blocked via hosts file.</div>`;
+        }
+      } else {
+        html += `<div class="error">Hosts file check failed</div>`;
+        html += `<div>Error: ${result.error}</div>`;
+      }
+      
+      hostsResult.innerHTML = html;
+    });
+    
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      // You could pre-load some data here if needed
+    });
+  </script>
+</body>
+</html>
