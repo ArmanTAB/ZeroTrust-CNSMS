@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Access Control Agent - Подтверждение входа</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      color: #333;
+    }
+    .mfa-container {
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      padding: 30px;
+      width: 400px;
+      max-width: 90%;
+    }
+    .logo {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .logo img {
+      width: 80px;
+      height: auto;
+    }
+    h1 {
+      color: #2c3e50;
+      margin-top: 0;
+      margin-bottom: 20px;
+      text-align: center;
+      font-weight: 600;
+    }
+    .subtitle {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #7f8c8d;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #555;
+      font-weight: 500;
+    }
+    .code-input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-size: 16px;
+      letter-spacing: 8px;
+      text-align: center;
+      font-weight: bold;
+      transition: border-color 0.3s;
+    }
+    .code-input:focus {
+      border-color: #3498db;
+      outline: none;
+    }
+    button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      padding: 14px;
+      width: 100%;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-top: 10px;
+      transition: background-color 0.3s;
+      font-weight: 500;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    button:disabled {
+      background-color: #95a5a6;
+      cursor: not-allowed;
+    }
+    .error-message {
+      color: #e74c3c;
+      margin-top: 15px;
+      text-align: center;
+      font-size: 14px;
+    }
+    .back-link {
+      display: block;
+      text-align: center;
+      margin-top: 15px;
+      color: #3498db;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .back-link:hover {
+      text-decoration: underline;
+    }
+    .loading {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 10px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .timer-container {
+      text-align: center;
+      margin-top: 10px;
+      color: #7f8c8d;
+      font-size: 14px;
+    }
+    .resend-link {
+      color: #3498db;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .resend-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="mfa-container">
+    <div class="logo">
+      <img src="../assets/logo.png" alt="Access Control Agent Logo" id="logo-img" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3QgZmlsbD0iIzM0OThkYiIgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIHJ4PSIxMCIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik03MSA1MEw3MSA3MEgzMUwzMSA1MEw1MSA1MEw1MSAzMEw3MSAzMEw3MSA1MFoiLz48Y2lyY2xlIGZpbGw9IiNmZmYiIGN4PSI0MSIgY3k9IjQwIiByPSIxMCIvPjwvc3ZnPg=='">
+    </div>
+    <h1>Подтверждение входа</h1>
+    <p class="subtitle">Введите код, отправленный на вашу электронную почту</p>
+    
+    <form id="mfa-form">
+      <div class="form-group">
+        <label for="verification-code">Код подтверждения</label>
+        <input type="text" id="verification-code" class="code-input" placeholder="• • • • • •" maxlength="6" autocomplete="off" required>
+      </div>
+      
+      <button type="submit" id="verify-button">Подтвердить</button>
+      <div id="error-message" class="error-message"></div>
+    </form>
+    
+    <div class="timer-container">
+      <span id="timer">Код действителен: 05:00</span>
+    </div>
+    
+    <div class="timer-container">
+      <span>Не получили код? <a class="resend-link" id="resend-link">Отправить повторно</a></span>
+    </div>
+    
+    <a href="#" class="back-link" id="back-link">Вернуться к вводу данных</a>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    // Элементы формы
+    const mfaForm = document.getElementById('mfa-form');
+    const codeInput = document.getElementById('verification-code');
+    const verifyButton = document.getElementById('verify-button');
+    const errorMessage = document.getElementById('error-message');
+    const backLink = document.getElementById('back-link');
+    const timerElement = document.getElementById('timer');
+    const resendLink = document.getElementById('resend-link');
+    
+    // Таймер обратного отсчета
+    let timeLeft = 300; // 5 минут в секундах
+    let timerId;
+    
+    // Запускаем таймер
+    function startTimer() {
+      clearInterval(timerId);
+      timeLeft = 300;
+      updateTimer();
+      
+      timerId = setInterval(() => {
+        timeLeft--;
+        updateTimer();
+        
+        if (timeLeft <= 0) {
+          clearInterval(timerId);
+          errorMessage.textContent = 'Время действия кода истекло. Пожалуйста, запросите новый код.';
+          verifyButton.disabled = true;
+        }
+      }, 1000);
+    }
+    
+    // Обновляем отображение таймера
+    function updateTimer() {
+      const minutes = Math.floor(timeLeft / 60);
+      const seconds = timeLeft % 60;
+      timerElement.textContent = `Код действителен: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    
+    // Функция отображения загрузки
+    function setLoading(isLoading) {
+      if (isLoading) {
+        verifyButton.disabled = true;
+        verifyButton.innerHTML = '<span class="loading"></span> Проверка...';
+        codeInput.disabled = true;
+      } else {
+        verifyButton.disabled = false;
+        verifyButton.textContent = 'Подтвердить';
+        codeInput.disabled = false;
+      }
+    }
+    
+    // Обработка отправки формы
+    mfaForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      
+      const code = codeInput.value.trim();
+      
+      // Валидация кода
+      if (!/^\d{6}$/.test(code)) {
+        errorMessage.textContent = 'Пожалуйста, введите 6-значный код подтверждения';
+        return;
+      }
+      
+      // Очищаем сообщение об ошибке
+      errorMessage.textContent = '';
+      
+      // Показываем состояние загрузки
+      setLoading(true);
+      
+      // Отправляем код подтверждения в основной процесс
+      ipcRenderer.send('verify-mfa', { code });
+    });
+    
+    // Обработка клика по ссылке "Назад"
+    backLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      ipcRenderer.send('back-to-login');
+    });
+    
+    // Обработка повторной отправки кода
+    resendLink.addEventListener('click', () => {
+      ipcRenderer.send('resend-mfa-code');
+      resendLink.textContent = 'Код отправлен';
+      resendLink.style.color = '#27ae60';
+      setTimeout(() => {
+        resendLink.textContent = 'Отправить повторно';
+        resendLink.style.color = '#3498db';
+      }, 3000);
+    });
+    
+    // Обработка ответа на проверку кода
+    ipcRenderer.on('verify-mfa-response', (event, response) => {
+      setLoading(false);
+      
+      if (response.success) {
+        errorMessage.textContent = '';
+        errorMessage.style.color = '#27ae60';
+        errorMessage.textContent = 'Код подтвержден. Выполняется вход...';
+      } else {
+        errorMessage.style.color = '#e74c3c';
+        errorMessage.textContent = response.error || 'Неверный код. Пожалуйста, попробуйте снова.';
+        codeInput.focus();
+      }
+    });
+    
+    // При загрузке страницы
+    window.addEventListener('DOMContentLoaded', () => {
+      // Запускаем таймер
+      startTimer();
+      
+      // Фокус на поле ввода кода
+      codeInput.focus();
+      
+      // Дополнительная обработка ввода только цифр
+      codeInput.addEventListener('input', function() {
+        this.value = this.value.replace(/[^\d]/g, '');
+      });
+    });
+    
+    // Обработка ответа о повторной отправке кода
+    ipcRenderer.on('resend-mfa-response', (event, response) => {
+      if (response.success) {
+        // Перезапускаем таймер
+        startTimer();
+        
+        // Очищаем сообщение об ошибке
+        errorMessage.textContent = '';
+      } else {
+        errorMessage.textContent = response.error || 'Не удалось отправить код. Пожалуйста, попробуйте позже.';
+      }
+    });
+  </script>
+</body>
+</html>

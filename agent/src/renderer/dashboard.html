@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Access Control Agent - Dashboard</title>
+  <style>
+    :root {
+      --primary-color: #3498db;
+      --primary-dark: #2980b9;
+      --success-color: #2ecc71;
+      --warning-color: #f39c12;
+      --danger-color: #e74c3c;
+      --gray-light: #f5f5f5;
+      --gray: #95a5a6;
+      --dark: #2c3e50;
+      --shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: var(--gray-light);
+      margin: 0;
+      padding: 0;
+      color: #333;
+      overflow-x: hidden;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .logo {
+      display: flex;
+      align-items: center;
+    }
+    
+    .logo img {
+      width: 36px;
+      height: auto;
+      margin-right: 10px;
+    }
+    
+    .logo h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      color: var(--dark);
+    }
+    
+    .user-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background-color: var(--primary-color);
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+      margin-right: 10px;
+      font-size: 1.2rem;
+    }
+    
+    .user-name {
+      margin-right: 15px;
+    }
+    
+    .logout-button {
+      background-color: var(--danger-color);
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.3s;
+    }
+    
+    .logout-button:hover {
+      background-color: #c0392b;
+    }
+    
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .card {
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 20px;
+      transition: transform 0.3s;
+    }
+    
+    .card:hover {
+      transform: translateY(-5px);
+    }
+    
+    .card-title {
+      display: flex;
+      align-items: center;
+      margin-bottom: 15px;
+      font-size: 1.2rem;
+      color: var(--dark);
+      font-weight: 600;
+    }
+    
+    .card-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-right: 15px;
+      color: white;
+      font-size: 1.3rem;
+    }
+    
+    .card-content {
+      font-size: 1rem;
+    }
+    
+    .status-indicator {
+      display: inline-block;
+      padding: 5px 15px;
+      border-radius: 30px;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    
+    .active {
+      background-color: rgba(46, 204, 113, 0.2);
+      color: var(--success-color);
+    }
+    
+    .inactive {
+      background-color: rgba(231, 76, 60, 0.2);
+      color: var(--danger-color);
+    }
+    
+    .activity-list {
+      height: 400px;
+      overflow-y: auto;
+      margin-top: 10px;
+      border-radius: 4px;
+      padding-right: 5px;
+    }
+    
+    .activity-list::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    .activity-list::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 10px;
+    }
+    
+    .activity-list::-webkit-scrollbar-thumb {
+      background: #bdc3c7;
+      border-radius: 10px;
+    }
+    
+    .activity-list::-webkit-scrollbar-thumb:hover {
+      background: #95a5a6;
+    }
+    
+    .activity-item {
+      padding: 12px 15px;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      align-items: flex-start;
+      transition: background-color 0.2s;
+    }
+    
+    .activity-item:hover {
+      background-color: #f9f9f9;
+    }
+    
+    .activity-icon {
+      margin-right: 15px;
+      font-size: 1.1rem;
+      color: var(--gray);
+    }
+    
+    .activity-content {
+      flex-grow: 1;
+    }
+    
+    .activity-timestamp {
+      color: var(--gray);
+      font-size: 0.8rem;
+      margin-bottom: 5px;
+    }
+    
+    .activity-description {
+      font-size: 0.95rem;
+      word-break: break-word;
+    }
+    
+    .blocked {
+      color: var(--danger-color);
+    }
+    
+    .allowed {
+      color: var(--success-color);
+    }
+    
+    .refresh-button {
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      margin-bottom: 10px;
+      transition: background-color 0.3s;
+    }
+    
+    .refresh-button:hover {
+      background-color: var(--primary-dark);
+    }
+    
+    .control-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    
+    .time-info {
+      color: var(--gray);
+      font-size: 0.85rem;
+    }
+    
+    .no-activities {
+      padding: 20px;
+      text-align: center;
+      color: var(--gray);
+      font-style: italic;
+    }
+    
+    .loading {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 10px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    #logout-status {
+      margin-left: 10px;
+      padding: 5px 10px;
+      background-color: #fff3cd;
+      color: #856404;
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
+    
+    .status-message {
+      padding: 10px 15px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+      font-size: 0.9rem;
+    }
+    
+    .status-success {
+      background-color: rgba(46, 204, 113, 0.2);
+      color: var(--success-color);
+    }
+    
+    .status-error {
+      background-color: rgba(231, 76, 60, 0.2);
+      color: var(--danger-color);
+    }
+    
+    .footer {
+      margin-top: 20px;
+      padding-top: 15px;
+      border-top: 1px solid #eee;
+      text-align: center;
+      color: var(--gray);
+      font-size: 0.8rem;
+    }
+
+    .time-rules-container {
+      margin-top: 15px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .time-rule-item {
+      background-color: #fff;
+      border-radius: 6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      margin-bottom: 12px;
+      padding: 15px;
+      transition: transform 0.2s, box-shadow 0.2s;
+      position: relative;
+      border-left: 4px solid var(--primary-color);
+    }
+
+    .time-rule-item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    }
+
+    .time-rule-item.block-rule {
+      border-left-color: var(--danger-color);
+    }
+
+    .time-rule-item.allow-rule {
+      border-left-color: var(--success-color);
+    }
+
+    .time-rule-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .rule-name {
+      font-weight: 600;
+      font-size: 1.05rem;
+      color: var(--dark);
+    }
+
+    .time-rule-details {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .time-rule-schedule, .time-rule-resources {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .schedule-icon, .resources-icon {
+      font-size: 1.1rem;
+      color: var(--gray);
+      min-width: 20px;
+      margin-top: 2px;
+    }
+
+    .schedule-text, .resources-text {
+      flex: 1;
+      line-height: 1.5;
+      color: #555;
+    }
+
+    .time-rule-item.loading {
+      opacity: 0.7;
+    }
+
+    .time-rule-badge {
+      display: inline-block;
+      font-size: 0.8rem;
+      padding: 2px 8px;
+      border-radius: 20px;
+      margin-right: 5px;
+      background-color: rgba(52, 152, 219, 0.1);
+      color: var(--primary-color);
+    }
+
+    .badge-website {
+      background-color: rgba(52, 152, 219, 0.1);
+      color: var(--primary-color);
+    }
+
+    .badge-app {
+      background-color: rgba(155, 89, 182, 0.1);
+      color: #9b59b6;
+    }
+
+    .badge-file {
+      background-color: rgba(243, 156, 18, 0.1);
+      color: var(--warning-color);
+    }
+
+    /* Для случаев, когда нет правил */
+    .no-rules {
+      text-align: center;
+      padding: 30px 0;
+      color: var(--gray);
+      font-style: italic;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+    }
+
+    .user-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background-color: var(--primary-color);
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+      margin-right: 10px;
+      font-size: 1.2rem;
+    }
+
+    .user-name {
+      margin-right: 15px;
+      font-weight: 500;
+      color: var(--dark); /* Важно указать цвет текста */
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 200px;
+    }
+
+    .logout-button {
+      background-color: var(--danger-color);
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.3s;
+    }
+
+    .logout-button:hover {
+      background-color: #c0392b;
+    }
+
+    .card {
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 20px;
+      transition: transform 0.3s;
+      margin-bottom: 20px; /* Добавить или увеличить этот отступ */
+    }
+
+    .rule-status-display {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+  .rule-status-display.active {
+    background-color: rgba(46, 204, 113, 0.2);
+    color: #27ae60;
+  }
+
+  .rule-status-display.inactive {
+    background-color: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+  }
+
+  .rule-status-display span {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 5px;
+  }
+
+  .rule-status-display.active span {
+    background-color: #27ae60;
+  }
+
+  .rule-status-display.inactive span {
+    background-color: #e74c3c;
+  }
+    .activity-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+  }
+
+  .activity-user {
+    font-size: 0.85rem;
+    color: var(--primary-color);
+    font-weight: 500;
+  }
+
+  .activity-user-email {
+    color: var(--primary-color);
+  }
+
+  .activity-user-id {
+    color: var(--gray);
+    font-style: italic;
+  }
+
+  .activity-user-unknown {
+    color: var(--gray);
+    font-style: italic;
+  }
+  </style>
+</head>
+<body>
+    <div class="container">
+      <header>
+        <div class="logo">
+          <img src="../assets/logo.png" alt="Logo" id="logo-img" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3QgZmlsbD0iIzM0OThkYiIgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIHJ4PSIxMCIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik03MSA1MEw3MSA3MEgzMUwzMSA1MEw1MSA1MEw1MSAzMEw3MSAzMEw3MSA1MFoiLz48Y2lyY2xlIGZpbGw9IiNmZmYiIGN4PSI0MSIgY3k9IjQwIiByPSIxMCIvPjwvc3ZnPg=='">
+          <h1>Access Control Agent</h1>
+        </div>
+        <div class="user-info">
+          <div class="user-icon" id="user-initials">U</div>
+          <div id="user-name" class="user-name">User Name</div>
+          <button id="logout-button" class="logout-button">Logout</button>
+        </div>
+      </header>
+      
+      <div id="status-message-container"></div>
+      
+      <!-- 1. Process Control и Network Protection блоки в одной строке -->
+      <div class="grid">
+        <div class="card">
+          <div class="card-title">
+            <div class="card-icon" style="background-color: #9b59b6;">🖥️</div>
+            <span>Process Control</span>
+          </div>
+          <div class="card-content">
+            <p>Prevents unauthorized applications from running on your device.</p>
+            <p><span class="status-indicator" id="process-status">Loading...</span></p>
+          </div>
+        </div>
+        
+        <div class="card">
+          <div class="card-title">
+            <div class="card-icon" style="background-color: #3498db;">🌐</div>
+            <span>Network Protection</span>
+          </div>
+          <div class="card-content">
+            <p>Blocks access to unauthorized websites based on your organization's policy.</p>
+            <p><span class="status-indicator" id="network-status">Loading...</span></p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Карточка для отображения правил -->
+      <div class="card">
+        <div class="card-title">
+          <div class="card-icon" style="background-color: #e67e22;">📋</div>
+          <span>Access Rules</span>
+        </div>
+        <div class="card-content">
+          <p>These are the access rules currently applied to your account.</p>
+          <div class="control-bar">
+            <button class="refresh-button" id="refresh-rules-btn">Refresh Rules</button>
+            <span class="time-info" id="rules-updated">Last updated: Just now</span>
+          </div>
+          
+          <div id="rules-list" class="time-rules-container">
+            <!-- Шаблон для правила (отображается при загрузке) -->
+            <div class="time-rule-item">
+              <div class="time-rule-header">
+                <span class="rule-name">Loading rules...</span>
+                <span class="status-indicator">...</span>
+              </div>
+              <div class="time-rule-details">
+                <div class="time-rule-schedule">
+                  <span class="schedule-icon">🔍</span>
+                  <span class="schedule-text">Fetching rules...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 3. Activity Log блок -->
+      <div class="card">
+        <div class="card-title">
+          <div class="card-icon" style="background-color: #2ecc71;">📊</div>
+          <span>Activity Log</span>
+        </div>
+        <div class="control-bar">
+          <button class="refresh-button" id="refresh-activities">Refresh Activity Log</button>
+          <span class="time-info" id="last-updated">Last updated: Just now</span>
+        </div>
+        <div class="activity-list" id="activity-list">
+          <div class="activity-item">
+            <div class="activity-icon">⏱️</div>
+            <div class="activity-content">
+              <div class="activity-timestamp">Loading activities...</div>
+              <div class="activity-description">Please wait while we fetch the latest activity data.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="footer">
+        <p>&copy; 2025 Access Control Agent v1.0.0 | Running as <span id="user-role">User</span> | <span id="user-department">Department</span></p>
+      </div>
+    </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    // Элементы страницы
+    const userInitials = document.getElementById('user-initials');
+    const userName = document.getElementById('user-name');
+    const userRole = document.getElementById('user-role');
+    const userDepartment = document.getElementById('user-department');
+    const networkStatus = document.getElementById('network-status');
+    const processStatus = document.getElementById('process-status');
+    const activityList = document.getElementById('activity-list');
+    const lastUpdated = document.getElementById('last-updated');
+    const logoutButton = document.getElementById('logout-button');
+    const refreshButton = document.getElementById('refresh-activities');
+    const statusMessageContainer = document.getElementById('status-message-container');
+    
+    // Форматирование даты
+    function formatDate(date) {
+      const d = new Date(date);
+      return d.toLocaleString();
+    }
+    
+    // Получение инициалов из имени
+    function getInitials(name) {
+      if (!name) return 'U';
+      
+      // Если это email, извлекаем первую часть до @
+      if (name.includes('@')) {
+        const namePart = name.split('@')[0];
+        return namePart.charAt(0).toUpperCase();
+      }
+      
+      const parts = name.split(' ');
+      if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+      return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    }
+    
+    // Обновление статуса защиты
+    function updateProtectionStatus() {
+      ipcRenderer.send('get-protection-status');
+    }
+    
+    // Обновление списка активностей
+    function updateActivities() {
+      refreshButton.disabled = true;
+      refreshButton.innerHTML = '<span class="loading"></span> Refreshing...';
+      
+      ipcRenderer.send('get-recent-activities');
+    }
+    
+    // Показать сообщение о статусе
+    function showStatusMessage(message, isSuccess = true) {
+      const div = document.createElement('div');
+      div.className = `status-message ${isSuccess ? 'status-success' : 'status-error'}`;
+      div.textContent = message;
+      
+      statusMessageContainer.innerHTML = '';
+      statusMessageContainer.appendChild(div);
+      
+      // Автоматически скрываем сообщение через 5 секунд
+      setTimeout(() => {
+        div.style.opacity = '0';
+        setTimeout(() => {
+          statusMessageContainer.innerHTML = '';
+        }, 500);
+      }, 5000);
+    }
+    
+    // Загрузка пользовательских данных из localStorage
+    
+    // Обработка кнопки выхода
+    logoutButton.addEventListener('click', () => {
+      // Показываем индикатор загрузки
+      logoutButton.disabled = true;
+      logoutButton.innerHTML = '<span class="loading"></span> Logging out...';
+      
+      // Добавляем сообщение о выходе
+      const statusMessage = document.createElement('div');
+      statusMessage.id = 'logout-status';
+      statusMessage.textContent = 'Stopping protection and logging out...';
+      document.querySelector('.user-info').appendChild(statusMessage);
+      
+      // Отправляем событие выхода в основной процесс
+      ipcRenderer.send('logout');
+      
+      // Очищаем локальное хранилище
+      localStorage.removeItem('userData');
+    });
+    
+    // Обработка кнопки обновления активностей
+    refreshButton.addEventListener('click', updateActivities);
+    
+    // Обработка получения статуса защиты
+    ipcRenderer.on('protection-status', (event, status) => {
+      // Обновляем статус защиты на странице
+      networkStatus.textContent = status.network ? 'Active' : 'Inactive';
+      networkStatus.className = 'status-indicator ' + (status.network ? 'active' : 'inactive');
+      
+      processStatus.textContent = status.process ? 'Active' : 'Inactive';
+      processStatus.className = 'status-indicator ' + (status.process ? 'active' : 'inactive');
+      
+      
+      // Обрабатываем данные пользователя, если они есть в статусе
+      if (status.user) {
+        handleUserData(status.user);
+      }
+    });
+
+    // Обработчик данных пользователя
+    ipcRenderer.on('user-data', (event, userData) => {
+      handleUserData(userData);
+    });
+    
+    // Обработка получения активностей
+    ipcRenderer.on('recent-activities', (event, activities) => {
+      // Obnovlyaem knopku obnovleniya
+      refreshButton.disabled = false;
+      refreshButton.textContent = 'Refresh Activity Log';
+      
+      // Obnovlyaem vremya poslednego obnovleniya
+      lastUpdated.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+      
+      // Ochischaem spisok aktivnostey
+      activityList.innerHTML = '';
+      
+      if (activities.length === 0) {
+        activityList.innerHTML = `
+          <div class="no-activities">
+            No activities recorded yet.
+          </div>
+        `;
+        return;
+      }
+      
+      // Dobavlyaem aktivnosti v spisok
+      for (const activity of activities) {
+        const activityItem = document.createElement('div');
+        activityItem.className = 'activity-item';
+        
+        let icon = '🔍';
+        if (activity.type === 'network') icon = '🌐';
+        else if (activity.type === 'process') icon = '🖥️';
+        else if (activity.type === 'file') icon = '📁';
+        
+        // Format user display - prioritize email over ID
+        let userDisplay = '';
+        if (activity.user_email) {
+          userDisplay = `<span class="activity-user-email">${activity.user_email}</span>`;
+        } else if (activity.userId) {
+          userDisplay = `<span class="activity-user-id">ID: ${typeof activity.userId === 'object' ? activity.userId.id || 'Unknown' : activity.userId}</span>`;
+        } else {
+          userDisplay = '<span class="activity-user-unknown">Unknown User</span>';
+        }
+        
+        // Enhanced activity layout with user info
+        activityItem.innerHTML = `
+          <div class="activity-icon">${icon}</div>
+          <div class="activity-content">
+            <div class="activity-header">
+              <div class="activity-timestamp">${formatDate(activity.timestamp)}</div>
+              <div class="activity-user">${userDisplay}</div>
+            </div>
+            <div class="activity-description ${activity.blocked ? 'blocked' : 'allowed'}">${activity.description}</div>
+          </div>
+        `;
+        
+        activityList.appendChild(activityItem);
+      }
+    });
+    
+    // Обработка ответа на выход
+    ipcRenderer.on('logout-response', (event, response) => {
+      if (response.success) {
+        showStatusMessage('Successfully logged out. Redirecting...', true);
+      } else {
+        logoutButton.disabled = false;
+        logoutButton.textContent = 'Logout';
+        
+        if (document.getElementById('logout-status')) {
+          document.getElementById('logout-status').remove();
+        }
+        
+        showStatusMessage(`Error during logout: ${response.error}`, false);
+      }
+    });
+    
+    // Обработка ответа на синхронизацию логов
+    ipcRenderer.on('sync-activity-logs-response', (event, response) => {
+      if (response.success) {
+        showStatusMessage(response.message, true);
+      } else {
+        showStatusMessage(`Error: ${response.error}`, false);
+      }
+    });
+    
+    // Инициализация при загрузке страницы
+    window.addEventListener('DOMContentLoaded', () => {
+      // Попытка загрузить данные пользователя из localStorage
+      const loadedFromStorage = loadUserData();
+      
+      // Если не удалось загрузить из localStorage, запрашиваем данные
+      if (!loadedFromStorage) {
+        userName.textContent = 'Loading...';
+        userInitials.textContent = '...';
+        
+        // Запрашиваем данные пользователя через 500мс, чтобы страница успела загрузиться
+        setTimeout(requestUserData, 500);
+      }
+      
+      // Обновляем статус защиты
+      updateProtectionStatus();
+      
+      // Обновляем активности
+      updateActivities();
+      
+      // Устанавливаем периодическое обновление статуса
+      setInterval(updateProtectionStatus, 5000);
+      
+      // Устанавливаем периодическое обновление активностей
+      setInterval(updateActivities, 30000);
+
+      setInterval(() => {
+        console.log('Background rules refresh');
+        ipcRenderer.send('get-all-rules');
+      }, 60000);
+    });
+
+    // Обработчик для кнопки обновления правил
+    document.getElementById('refresh-rules-btn').addEventListener('click', () => {
+      refreshAllRules(false);
+    });
+
+    // Функция обновления правил
+    function refreshAllRules(forceUpdate = false) {
+      const rulesList = document.getElementById('rules-list');
+      const refreshButton = document.getElementById('refresh-rules-btn');
+      
+      // Сохраняем оригинальный текст кнопки
+      const originalText = refreshButton.textContent;
+      
+      // Обновляем состояние кнопки ТОЛЬКО если это ручное обновление
+      if (forceUpdate || event && event.type === 'click') {
+        refreshButton.disabled = true;
+        refreshButton.innerHTML = forceUpdate ? 
+          '<span class="loading"></span> Force Updating...' : 
+          '<span class="loading"></span> Refreshing...';
+      }
+      
+      // Очищаем предыдущий таймаут
+      if (window.rulesLoadingTimeout) {
+        clearTimeout(window.rulesLoadingTimeout);
+      }
+      
+      // Устанавливаем таймаут для сброса состояния кнопки
+      window.rulesLoadingTimeout = setTimeout(() => {
+        refreshButton.disabled = false;
+        refreshButton.textContent = 'Refresh Rules';
+      }, 10000); // 10 секунд максимум
+      
+      // Запрашиваем правила
+      console.log(`Requesting rules from main process with forceUpdate=${forceUpdate}`);
+      
+      if (forceUpdate) {
+        ipcRenderer.send('force-update-rules');
+      } else {
+        ipcRenderer.send('get-all-rules');
+      }
+      
+      // Обновляем время последнего обновления
+      const rulesUpdated = document.getElementById('rules-updated');
+      if (rulesUpdated) {
+        rulesUpdated.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+      }
+    }
+
+    // Set up double-click handling for the refresh button
+    document.addEventListener('DOMContentLoaded', () => {
+      const refreshButton = document.getElementById('refresh-rules-btn');
+      
+      if (refreshButton) {
+        refreshButton.disabled = false;
+        refreshButton.textContent = 'Refresh Rules';
+        // Variables for double-click detection
+        let clickTimeout = null;
+        let isDoubleClick = false;
+        
+        // Handle clicks with timeout for double-click detection
+        refreshButton.addEventListener('click', function(event) {
+          if (clickTimeout !== null) {
+            // This is a double click
+            clearTimeout(clickTimeout);
+            clickTimeout = null;
+            isDoubleClick = true;
+            
+            // Confirm force update
+            if (confirm('Force update will refresh the cache and immediately apply all rule changes. Continue?')) {
+              refreshAllRules(true);
+              
+              // Show status message
+              const statusMessageContainer = document.getElementById('status-message-container');
+              if (statusMessageContainer) {
+                const div = document.createElement('div');
+                div.className = 'status-message status-success';
+                div.textContent = 'Performing force update of rules. This will clear cache and apply all changes immediately.';
+                
+                statusMessageContainer.innerHTML = '';
+                statusMessageContainer.appendChild(div);
+                
+                // Auto-hide message
+                setTimeout(() => {
+                  div.style.opacity = '0';
+                  setTimeout(() => {
+                    statusMessageContainer.innerHTML = '';
+                  }, 500);
+                }, 5000);
+              }
+            }
+          } else {
+            // This might be a single click
+            event.preventDefault();
+            isDoubleClick = false;
+            
+            clickTimeout = setTimeout(() => {
+              if (!isDoubleClick) {
+                // This was a single click
+                refreshAllRules(false);
+              }
+              clickTimeout = null;
+            }, 300); // Adjust this value to be suitable for double-click detection
+          }
+        });
+        
+        // Add tooltip to explain double-click
+        refreshButton.title = 'Click to refresh rules. Double-click to force update and clear cache.';
+        
+        // Add small indicator about double-click
+        if (!refreshButton.querySelector('.double-click-hint')) {
+          const hintSpan = document.createElement('span');
+          hintSpan.className = 'double-click-hint';
+          hintSpan.style.fontSize = '0.7em';
+          hintSpan.style.opacity = '0.7';
+          hintSpan.textContent = ' (double-click for force update)';
+          refreshButton.appendChild(hintSpan);
+        }
+      }
+    });
+
+    // Handle the response for force-update-rules
+    ipcRenderer.on('force-update-rules-response', (event, response) => {
+      const refreshButton = document.getElementById('refresh-rules-btn');
+  
+      if (refreshButton) {
+        refreshButton.disabled = false;
+        refreshButton.textContent = 'Refresh Rules';
+      }
+      
+      if (window.rulesLoadingTimeout) {
+        clearTimeout(window.rulesLoadingTimeout);
+      }
+      
+      // Show status message
+      const statusMessageContainer = document.getElementById('status-message-container');
+      if (statusMessageContainer) {
+        const div = document.createElement('div');
+        div.className = `status-message ${response.success ? 'status-success' : 'status-error'}`;
+        div.textContent = response.success 
+          ? `Rules successfully force updated. Applied ${response.count} rules.` 
+          : `Error updating rules: ${response.error}`;
+        
+        statusMessageContainer.innerHTML = '';
+        statusMessageContainer.appendChild(div);
+        
+        // Auto-hide message after 5 seconds
+        setTimeout(() => {
+          div.style.opacity = '0';
+          setTimeout(() => {
+            statusMessageContainer.innerHTML = '';
+          }, 500);
+        }, 5000);
+      }
+      
+      // Update last updated time
+      const rulesUpdated = document.getElementById('rules-updated');
+      if (rulesUpdated) {
+        rulesUpdated.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+      }
+    });
+
+    // Функция проверки активности правила в текущий момент
+    function isRuleActiveNow(rule) {
+      // If rule is not marked as active, it's inactive
+      if (!rule.isActive) {
+        console.log(`Rule "${rule.name}" is marked as inactive`);
+        return false;
+      }
+
+      // Check if rule has time restrictions
+      if (!rule.conditions || 
+          !rule.conditions.timeRestrictions || 
+          !rule.conditions.timeRestrictions.enabled) {
+        // No time restrictions, rule is always active
+        return true;
+      }
+
+      const tr = rule.conditions.timeRestrictions;
+      const now = new Date();
+      
+      // Check day of week (0 = Sunday, 1 = Monday, ...)
+      const currentDay = now.getDay();
+      if (tr.days && tr.days.length > 0 && !tr.days.includes(currentDay)) {
+        console.log(`Day mismatch: current day ${currentDay} not in allowed days ${tr.days.join(',')}`);
+        return false;
+      }
+      
+      // Check time (convert to minutes for easier comparison)
+      if (tr.startTime && tr.endTime) {
+        const currentTime = now.getHours() * 60 + now.getMinutes();
+        
+        const startParts = tr.startTime.split(':');
+        const endParts = tr.endTime.split(':');
+        
+        if (startParts.length === 2 && endParts.length === 2) {
+          const startTime = parseInt(startParts[0], 10) * 60 + parseInt(startParts[1], 10);
+          const endTime = parseInt(endParts[0], 10) * 60 + parseInt(endParts[1], 10);
+          
+          console.log(`Time comparison: current=${currentTime}, start=${startTime}, end=${endTime}`);
+          
+          if (currentTime < startTime || currentTime > endTime) {
+            console.log(`Time outside range: ${currentTime} not between ${startTime}-${endTime}`);
+            return false;
+          }
+        }
+      }
+      
+      // All checks passed, rule is active
+      console.log(`Rule "${rule.name}" is active now`);
+      return true;
+    }
+
+    // Обработка ответа с списком правил
+    ipcRenderer.on('all-rules', (event, rules) => {
+      console.log(`Received ${rules ? rules.length : 0} rules from main process`);
+      
+      const rulesList = document.getElementById('rules-list');
+
+      const refreshButton = document.getElementById('refresh-rules-btn');
+      if (refreshButton) {
+        refreshButton.disabled = false;
+        refreshButton.textContent = 'Refresh Rules';
+      }
+      
+      if (window.rulesLoadingTimeout) {
+        clearTimeout(window.rulesLoadingTimeout);
+      }
+
+      rulesList.innerHTML = '';
+      
+      // Handle empty rules case
+      if (!rules || rules.length === 0) {
+        rulesList.innerHTML = `
+          <div class="no-rules">
+            <div>No access rules are currently configured for your account.</div>
+            <div style="margin-top: 10px; font-size: 0.9rem;">Access rules are created by administrators in the management portal.</div>
+          </div>
+        `;
+        return;
+      }
+      
+      const sortedRules = [...rules].sort((a, b) => {
+        if (a.type !== b.type) {
+          return a.type === 'block' ? -1 : 1;
+        }
+        return (b.priority || 0) - (a.priority || 0);
+      });
+      
+      for (const rule of sortedRules) {
+        const ruleTypeClass = rule.type === 'block' ? 'block-rule' : 'allow-rule';
+        
+        const hasTimeRestrictions = rule.conditions && 
+                                  rule.conditions.timeRestrictions && 
+                                  rule.conditions.timeRestrictions.enabled;
+        
+        const isActive = isRuleActiveNow(rule);
+        const statusClass = isActive ? 'active' : 'inactive';
+        const statusText = isActive ? 'Active Now' : 'Inactive';
+        
+        let scheduleHtml = '';
+        if (hasTimeRestrictions) {
+          const tr = rule.conditions.timeRestrictions;
+          
+          const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+          let daysText = 'Every day';
+          
+          if (tr.days && tr.days.length > 0 && tr.days.length < 7) {
+            if (tr.days.length === 5 && 
+                tr.days.includes(1) && tr.days.includes(2) && 
+                tr.days.includes(3) && tr.days.includes(4) && 
+                tr.days.includes(5)) {
+              daysText = 'Weekdays (Mon-Fri)';
+            } else if (tr.days.length === 2 && 
+                      tr.days.includes(0) && tr.days.includes(6)) {
+              daysText = 'Weekends (Sat-Sun)';
+            } else {
+              daysText = tr.days.map(day => dayNames[day]).join(', ');
+            }
+          }
+          
+          // Форматируем время
+          let timeText = 'All hours';
+          if (tr.startTime && tr.endTime) {
+            // Преобразуем 24-часовой формат в более читаемый формат AM/PM
+            const formatTime = (timeStr) => {
+              const [hours, minutes] = timeStr.split(':').map(Number);
+              const period = hours >= 12 ? 'PM' : 'AM';
+              const displayHours = hours % 12 || 12; // Convert 0 to 12 for 12 AM
+              return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+            };
+            
+            timeText = `${formatTime(tr.startTime)} - ${formatTime(tr.endTime)}`;
+          }
+          
+          scheduleHtml = `
+            <div class="time-rule-schedule">
+              <span class="schedule-icon">🕒</span>
+              <span class="schedule-text"><strong>Time restrictions:</strong> ${daysText}, ${timeText}</span>
+            </div>
+          `;
+        }
+        
+        // Форматируем ресурсы
+        let resourcesHtml = '';
+        
+        if (rule.resources) {
+          const parts = [];
+          
+          // Веб-сайты
+          if (rule.resources.websites && rule.resources.websites.length > 0) {
+            const websiteBadges = rule.resources.websites.map(site => 
+              `<span class="time-rule-badge badge-website">${site}</span>`
+            ).join(' ');
+            
+            parts.push(`<div class="resources-group">
+              <div class="resources-label">Websites:</div>
+              <div class="resources-badges">${websiteBadges}</div>
+            </div>`);
+          }
+          
+          // Приложения
+          if (rule.resources.applications && rule.resources.applications.length > 0) {
+            const appBadges = rule.resources.applications.map(app => 
+              `<span class="time-rule-badge badge-app">${app}</span>`
+            ).join(' ');
+            
+            parts.push(`<div class="resources-group">
+              <div class="resources-label">Applications:</div>
+              <div class="resources-badges">${appBadges}</div>
+            </div>`);
+          }
+          
+          // Если правило пустое, показываем сообщение
+          if (parts.length === 0) {
+            parts.push('<div class="resources-group">No specific resources defined.</div>');
+          }
+          
+          resourcesHtml = parts.join('');
+        }
+        
+        const ruleItem = document.createElement('div');
+        ruleItem.className = `time-rule-item ${rule.type === 'block' ? 'block-rule' : 'allow-rule'}`;
+        ruleItem.innerHTML = `
+          <div class="time-rule-header">
+            <span class="rule-name">${rule.name}</span>
+            <div class="rule-status-display ${isActive ? 'active' : 'inactive'}">
+              <span></span>
+              ${isActive ? 'Active' : 'Inactive'}
+            </div>
+          </div>
+          <div class="time-rule-details">
+            ${scheduleHtml}
+            <div class="time-rule-resources">
+              <span class="resources-icon">🔒</span>
+              <div class="resources-text">${resourcesHtml}</div>
+            </div>
+          </div>
+        `;
+        
+        rulesList.appendChild(ruleItem);
+      }
+    });
+
+    // Запрашиваем правила при загрузке страницы
+    document.addEventListener('DOMContentLoaded', () => {
+      // Запрашиваем правила при загрузке
+      console.log('Requesting rules on page load');
+      setTimeout(refreshAllRules, 1000);
+    });
+
+    // Увеличиваем отступ между блоками
+    document.addEventListener('DOMContentLoaded', () => {
+      // Добавляем стиль для увеличения отступа между блоками
+      const style = document.createElement('style');
+      style.textContent = `
+        .card {
+          margin-bottom: 30px !important;
+        }
+      `;
+      document.head.appendChild(style);
+    });
+
+    // Инициализация при загрузке страницы
+    document.addEventListener('DOMContentLoaded', () => {
+      // Запрашиваем правила при загрузке
+      refreshAllRules();
+      
+      // Обновляем правила каждую минуту для актуализации статуса
+      setInterval(refreshAllRules, 60000);
+    });
+
+    // Функция для запроса данных пользователя
+    function requestUserData() {
+      ipcRenderer.send('get-user-data');
+    }
+
+    // Функция получения инициалов из имени
+    function getInitials(name) {
+      if (!name) return 'U';
+      
+      // Если это email, извлекаем первую часть до @
+      if (name.includes('@')) {
+        const namePart = name.split('@')[0];
+        return namePart.charAt(0).toUpperCase();
+      }
+      
+      const parts = name.split(' ');
+      if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+      return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    }
+
+    // Функция загрузки пользовательских данных из localStorage
+    function loadUserData() {
+      const userDataStr = localStorage.getItem('userData');
+      if (userDataStr) {
+        try {
+          const userData = JSON.parse(userDataStr);
+          
+          // Обновляем отображение пользователя
+          updateUserDisplay(userData);
+          return true;
+        } catch (error) {
+          console.error('Error parsing user data:', error);
+        }
+      }
+      return false;
+    }
+
+    // Функция обновления отображения пользователя
+    function updateUserDisplay(userData) {
+      if (!userData) return false;
+      
+      // Обновляем имя пользователя и инициалы
+      if (userData.firstName && userData.lastName) {
+        userName.textContent = `${userData.firstName} ${userData.lastName}`;
+        userInitials.textContent = getInitials(`${userData.firstName} ${userData.lastName}`);
+        console.log(`Displaying user: ${userData.firstName} ${userData.lastName}`);
+      } else if (userData.email) {
+        userName.textContent = userData.email;
+        userInitials.textContent = getInitials(userData.email);
+        console.log(`Displaying user email: ${userData.email}`);
+      } else {
+        userName.textContent = 'User';
+        userInitials.textContent = 'U';
+      }
+      
+      // Обновляем роль и отдел если они указаны
+      if (userData.role) {
+        userRole.textContent = userData.role;
+      }
+      
+      if (userData.department) {
+        userDepartment.textContent = userData.department;
+      }
+      
+      return true;
+    }
+
+    // Обработка данных пользователя из ответа
+    // Обработка данных пользователя из ответа
+    function handleUserData(newUserData) {
+      if (!newUserData) {
+        console.warn('Received empty user data');
+        return false;
+      }
+      
+      // Получаем существующие данные из localStorage
+      let existingUserData = {};
+      const userDataStr = localStorage.getItem('userData');
+      if (userDataStr) {
+        try {
+          existingUserData = JSON.parse(userDataStr);
+        } catch (error) {
+          console.error('Error parsing existing user data:', error);
+        }
+      }
+      
+      // Слияние данных - сохраняем существующие поля, если их нет в новых данных
+      const mergedUserData = {
+        ...existingUserData,
+        ...newUserData
+      };
+      
+      if ((!newUserData.firstName || !newUserData.lastName) && 
+          existingUserData.firstName && existingUserData.lastName) {
+        mergedUserData.firstName = existingUserData.firstName;
+        mergedUserData.lastName = existingUserData.lastName;
+        console.log('Preserved existing name data during update');
+      }
+      
+      // Сохраняем объединенные данные в localStorage
+      localStorage.setItem('userData', JSON.stringify(mergedUserData));
+      console.log('Saved merged user data to localStorage:', mergedUserData);
+      
+      // Обновляем отображение пользователя
+      return updateUserDisplay(mergedUserData);
+    }
+  </script>
+</body>
+</html>
